@@ -34,7 +34,7 @@ DeFiState Engine
 WebSocket JSON-RPC Stream
    │
    ▼
-Clients / Consumers
+Clients 
 ```
 
 ---
