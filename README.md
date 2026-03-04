@@ -3,17 +3,13 @@
 
 **DeFiState** is an open infrastructure project for producing **block-synchronized streams of DeFi protocol state on EVM chains**.
 
-It aggregates data from multiple protocol indexers into a unified engine and exposes the resulting state through a **JSON-RPC stream** for simplified consumption by trading systems, analytics platforms, and other DeFi infrastructure.
-
-Instead of building and maintaining multiple protocol indexers, consumers can subscribe to a single **block-synchronized DeFi state feed**.
+It aggregates data from protocol indexers and exposes the resulting state through a **JSON-RPC stream** for simplified consumption of DeFi state.
 
 ---
 
 # Overview
 
-Modern DeFi infrastructure requires continuously tracking protocol state across multiple smart contracts and protocols.
-
-DeFiState provides a framework for collecting, synchronizing, and streaming this data in a structured and easily consumable format.
+DeFiState provides a framework for collecting, synchronizing, and streaming protocol data in a structured and easily consumable format.
 
 At its core is the **DeFiState Engine**, which:
 
@@ -39,15 +35,13 @@ Protocol Indexers
    ▼
 DeFiState Engine
    │
-   │ builds block State
+   │ aggregate data
    ▼
 JSON-RPC Stream
    │
    ▼
 Clients / Consumers
 ```
-
-The engine acts as the **coordination layer** between protocol indexers and external consumers.
 
 ---
 
@@ -74,15 +68,11 @@ On every block:
 
 ## Protocol Indexers
 
-Protocols provide domain-specific state information to the engine.
-
 Currently supported protocols:
 
 - **Uniswap V2**
 - **Uniswap V3**
 - **ERC20 Tokens**
-
-Each protocol implementation reconstructs and updates protocol state for the engine.
 
 ---
 
@@ -91,24 +81,14 @@ Each protocol implementation reconstructs and updates protocol state for the eng
 When new tokens are discovered, DeFiState analyzes them using a **Foundry Anvil fork**.
 
 This allows the system to determine:
-
-- token metadata
 - transfer gas cost
-- fee-on-transfer behavior
-
-This analysis ensures that token behavior is correctly modeled when interacting with liquidity pools.
+- transfer fees
 
 ---
 
 ## Token–Pool Graph
 
 DeFiState constructs a **graph representing relationships between tokens and pools**.
-
-The graph enables:
-
-- routing
-- arbitrage detection
-- liquidity exploration
 
 This structure is also streamed to consumers as part of the state.
 
@@ -120,7 +100,7 @@ When the system starts, the following ports are available:
 
 | Port | Description |
 |-----|-------------|
-| 8080 | DeFiState JSON-RPC stream |
+| 8080 | DeFiState Websocket JSON-RPC stream |
 | 2112 | Prometheus metrics |
 | 6060 | pprof profiling |
 
@@ -166,7 +146,7 @@ docker compose build
 docker compose up
 ```
 
-The container will start the DeFiState system using the `config.yaml` file located in the repository root.
+The container will start the DeFiState system using a `config.yaml` file located in the repository root.
 ---
 
 # Consuming the Stream
@@ -224,32 +204,8 @@ for state := range client.State() {
 
 Each `State` object contains the aggregated protocol data produced by the DeFiState engine for that block.
 
-This allows downstream systems to build trading logic, analytics pipelines, or research tooling directly on top of the synchronized DeFi state stream.
-
 ---
 
-# Supported Protocols
-
-Currently supported:
-
-- Uniswap V2 & forks
-- Uniswap V3 & forks (PancakeSwap, Aerodrome, etc.)
-- ERC20 tokens
-
-Additional protocols can be added through the protocol interface.
-
----
-
-# Use Cases
-
-DeFiState can power:
-
-- trading systems
-- arbitrage engines
-- liquidity analytics
-- and other real-time DeFi data platforms
-
----
 
 # Roadmap
 
