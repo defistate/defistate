@@ -1,22 +1,18 @@
 
 # DeFiState
 
-**DeFiState** is an open infrastructure project for producing **block-synchronized streams of DeFi protocol state on EVM chains**. The system aggregates data from protocol indexers and exposes the resulting state through a **JSON-RPC interface**, enabling applications to easily consume real-time DeFi state using a simple subscription.
+**DeFiState** is an open infrastructure project for producing **block-synchronized streams of DeFi protocol state on EVM chains**. The system aggregates data from protocol indexers and exposes the resulting state through a **JSON-RPC interface**, enabling applications to consume real-time DeFi state using a simple subscription.
 
 ---
 
 # Overview
 
-DeFiState provides a framework for collecting, synchronizing, and streaming protocol data in a structured and easily consumable format.
-
 At its core is the **DeFiState Engine**, which:
 
 1. Initializes with a set of protocol providers
-2. Polls each protocol indexer for state changes on every block
+2. Polls each provided protocol indexer for state at the current block
 3. Aggregates the data into a unified **State object**
-4. Publishes the state to subscribers via a **Websocket JSON-RPC stream**
-
-This provides downstream systems with a **consistent view of DeFi for each block**.
+4. Broadcasts the state to subscribers via a **WebSocket JSON-RPC stream**
 
 ---
 
@@ -35,7 +31,7 @@ DeFiState Engine
    │
    │ aggregate data
    ▼
-Websocket JSON-RPC Stream
+WebSocket JSON-RPC Stream
    │
    ▼
 Clients / Consumers
@@ -63,7 +59,7 @@ On every block:
 
 ## Protocol Indexers
 
-Currently supported protocols:
+Currently supported protocol indexers:
 
 - **Uniswap V2**
 - **Uniswap V3**
@@ -95,7 +91,7 @@ When the system starts, the following ports are available:
 
 | Port | Description |
 |-----|-------------|
-| 8080 | DeFiState Websocket JSON-RPC stream |
+| 8080 | DeFiState WebSocket JSON-RPC stream |
 | 2112 | Prometheus metrics |
 | 6060 | pprof profiling |
 
@@ -146,7 +142,7 @@ The container will start the DeFiState system using a `config.yaml` file located
 
 # Consuming the Stream
 
-DeFiState provides client libraries for connecting to the websocket JSON-RPC stream and receiving block-synchronized protocol state.
+DeFiState provides client libraries for connecting to the WebSocket JSON-RPC stream and receiving block-synchronized protocol state.
 
 To establish a connection, use the `DialJSONRPCStream` function from the appropriate client package located in the `clients/chains` directory.
 
