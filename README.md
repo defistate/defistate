@@ -1,7 +1,7 @@
 
 # DeFiState
 
-**DeFiState** is an open infrastructure project for producing **block-synchronized streams of DeFi protocol state on EVM chains**. Our systems aggregate data from protocol indexers and expose the resulting state through a **JSON-RPC interface**, enabling applications to easily consume real-time DeFi protocol state.
+**DeFiState** is an open infrastructure project for producing **block-synchronized streams of DeFi protocol state on EVM chains**. Our systems aggregate data from protocol indexers and expose the resulting state through a **JSON-RPC interface**, enabling applications to easily consume real-time DeFi state.
 
 ---
 
@@ -12,11 +12,11 @@ DeFiState provides a framework for collecting, synchronizing, and streaming prot
 At its core is the **DeFiState Engine**, which:
 
 1. Initializes with a set of protocol providers
-2. Polls each protocol for state changes on every block
+2. Polls each protocol indexer for state changes on every block
 3. Aggregates the data into a unified **State object**
 4. Publishes the state to subscribers via a **Websocket JSON-RPC stream**
 
-This enables downstream systems to consume a **consistent view of DeFi protocol state for each block**.
+This provides downstream systems with a **consistent view of DeFi for each block**.
 
 ---
 
@@ -52,15 +52,12 @@ The **DeFiState Engine** orchestrates the system.
 Responsibilities:
 
 - block synchronization
-- protocol polling
 - state aggregation
-- subscriber management
 
 On every block:
 
-1. protocols are polled for updates
-2. a new **State** object is constructed
-3. the state is broadcast to stream subscribers
+1. a new **State** object is constructed using aggregated data
+2. the state is broadcast to subscribers
 
 ---
 
