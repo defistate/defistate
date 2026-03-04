@@ -1,0 +1,16 @@
+- given an []uniswapv3pool addreses, we need to:
+    - start a tick indexer for each pool (and ensure one wasn't started previously)
+    - manage each indexer as one - which ensures that the whole requests do not overwhelm the system
+    - have all ticks for each pool
+        - because we do not know what the system's view should be and can't determine it
+    - monitor changes for pool and ensure ticks are updated
+
+
+
+
+solution:
+    - we need an eventer to find ticks that should be updated
+    - we also need a way to ensure that even when events are missed, we can still fetch the latest ticks
+        - so eventer + polling mechanism
+    - i think there should be a central "Tick request manager" to handle the fetching of the ticks  
+        - each request will have an ID and the tick to fetch
