@@ -1,0 +1,16 @@
+services:
+  # The main DeFi State Engine application.
+  dse:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dse
+    restart: unless-stopped
+    ports:
+      # The host port (left side) is flexible via the .env file.
+      # The container port (right side) is fixed at 8080.
+      - "${DSE_APP_PORT:-8080}:8080"
+      - "${DSE_METRICS_PORT:-2112}:2112"
+      - "${DSE_PPROF_PORT:-6060}:6060"
+    volumes:
+      - ./config.yml:/app/config.yml
