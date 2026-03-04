@@ -106,8 +106,7 @@ DeFiState constructs a **graph representing relationships between tokens and poo
 
 The graph enables:
 
-- routing analysis
-- path discovery
+- routing
 - arbitrage detection
 - liquidity exploration
 
@@ -140,7 +139,7 @@ chain: ethereum # chain name
 # Configuration for the RPC client pool used by the systems
 client_manager:
   rpc_urls:
-    - ws://your-evm-rpc
+    - ws://your-evm-rpc-1
   max_concurrent_requests: 32
 
 # Core engine behavior settings
@@ -150,7 +149,7 @@ engine:
 # Configuration for the Anvil fork used for simulations
 fork:
   rpc_url: ws://your-evm-rpc
-  token_overrides:
+  token_overrides: # optional
     "0xTokenAddress":
       gas: 65000
       fee_on_transfer_percentage: 2
@@ -163,6 +162,7 @@ fork:
 Start the full system using Docker:
 
 ```
+docker compose build
 docker compose up
 ```
 
@@ -173,7 +173,7 @@ The container will start the DeFiState system using the `config.yaml` file locat
 
 DeFiState provides client libraries for connecting to the websocket JSON-RPC stream and receiving block-synchronized protocol state.
 
-To establish a connection, use the `DialJSONRPCStream` function from the appropriate client package located in the `clients/chain` directory.
+To establish a connection, use the `DialJSONRPCStream` function from the appropriate client package located in the `clients/chains` directory.
 
 ```go
 func DialJSONRPCStream(
@@ -246,10 +246,8 @@ DeFiState can power:
 
 - trading systems
 - arbitrage engines
-- routing algorithms
 - liquidity analytics
-- DeFi research infrastructure
-- real-time DeFi data platforms
+- and other real-time DeFi data platforms
 
 ---
 
@@ -263,7 +261,7 @@ Expand support for additional DeFi protocols across EVM chains.
 
 ### Improved Indexers
 
-Continue improving the performance and reliability of protocol indexers, focusing on faster synchronization and reduced RPC overhead and persisting indexed state.
+Continue improving the performance and reliability of protocol indexers, focusing on faster synchronization, reduced RPC overhead and persisting indexed state.
 
 ### Monitoring & Observability
 
