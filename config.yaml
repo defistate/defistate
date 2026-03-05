@@ -1,0 +1,32 @@
+# Example DeFiState configuration
+# Replace the values below with the chain and RPC endpoints you want to index.
+
+# Supported Chains
+# Ethereum
+# Base
+# Arbitrum
+# BSC
+# Celo
+# Katana
+# Pulsechain
+
+# General Chain Settings
+chain_id: 0000
+chain: "example-chain"
+
+# RPC Client Pool Settings
+client_manager:
+  rpc_urls:
+    - "wss://your-evm-node.example.com"
+
+  # Maximum number of concurrent RPC requests
+  max_concurrent_requests: 50
+
+# Core DeFi Engine Settings
+engine:
+  # Maximum time the engine waits for protocol synchronization per block
+  max_wait_until_sync: 1s
+
+# Configuration for the fork used for token analysis
+fork:
+  rpc_url: "wss://your-evm-node.example.com"
