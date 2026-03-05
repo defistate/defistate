@@ -64,9 +64,9 @@ func (s *ForkPoolService) startRPCServer(ctx context.Context, port int) error {
 
 	// Start the listener in a background goroutine.
 	go func() {
-		s.logger.Info("JSON-RPC server listening", "port", port)
+		s.logger.Info("json-rpc server listening", "port", port)
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			s.logger.Error("RPC server ListenAndServe error", "error", err)
+			s.logger.Error("rpc server ListenAndServe error", "error", err)
 		}
 	}()
 

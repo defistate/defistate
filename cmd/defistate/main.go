@@ -460,7 +460,7 @@ func setupERC20Analyzer(
 	}
 
 	errorHandler := func(err error) {
-		appErrHandler.Handle(fmt.Errorf("ERC20 Analyzer System: %w", err))
+		appErrHandler.Handle(fmt.Errorf("erc20 analyzer System: %w", err))
 	}
 	analyzerCfg := erc20analyzer.Config{
 		NewBlockEventer:          blockSubscriberGenerator("erc20-token-analyzer"),

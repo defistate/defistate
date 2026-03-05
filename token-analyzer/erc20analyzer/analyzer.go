@@ -100,7 +100,7 @@ func NewAnalyzer(ctx context.Context, cfg Config) (*Analyzer, error) {
 		return nil, err
 	}
 
-	cfg.Logger.Info("ERC20 Analyzer starting up",
+	cfg.Logger.Info("erc20 analyzer starting up",
 		"fee_update_frequency", cfg.FeeAndGasUpdateFrequency,
 		"token_update_interval", cfg.MinTokenUpdateInterval,
 	)
