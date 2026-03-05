@@ -127,6 +127,7 @@ docker compose up
 ```
 
 The container will start the DeFiState system using a `config.yaml` file located in the repository root.
+
 ---
 
 # Consuming the Stream
