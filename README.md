@@ -122,8 +122,8 @@ fork:
 Start the full system using Docker:
 
 ```
-docker compose build
-docker compose up
+docker compose up --build
+
 ```
 
 The container will start the DeFiState system using a `config.yaml` file located in the repository root.
