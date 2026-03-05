@@ -174,7 +174,7 @@ func NewEngine(ctx context.Context, cfg *Config) (*Engine, error) {
 	lenProtocols := len(engine.protocols)
 	engine.metrics.ActiveProtocols.Set(float64(lenProtocols + lenBlockSynchronizedProtocols))
 
-	engine.logger.Info("Engine starting up",
+	engine.logger.Info("engine starting up",
 		"protocols", lenProtocols+lenBlockSynchronizedProtocols,
 		"poll_sync_interval", pollSyncInterval,
 		"max_wait_until_sync", maxWaitUntilSync,
@@ -289,7 +289,7 @@ func (engine *Engine) runEventLoop(ctx context.Context) {
 			return
 		case block, ok := <-engine.blockProcessingQueue:
 			if !ok {
-				engine.logger.Info("Block processing queue closed, shutting down event loop.")
+				engine.logger.Info("block processing queue closed, shutting down event loop.")
 				close(engine.viewEventer)
 				return
 			}
@@ -299,7 +299,7 @@ func (engine *Engine) runEventLoop(ctx context.Context) {
 
 			procTimer := prometheus.NewTimer(engine.metrics.BlockProcessingDur)
 			blockNum := block.NumberU64()
-			engine.logger.Debug("Processing block", "block_number", blockNum)
+			engine.logger.Debug("processing block", "block_number", blockNum)
 
 			engine.waitForBlockSynchronizedProtocols(ctx, block)
 
@@ -311,7 +311,7 @@ func (engine *Engine) runEventLoop(ctx context.Context) {
 			engine.metrics.LastProcessedBlock.Set(float64(blockNum))
 
 			procTimer.ObserveDuration()
-			engine.logger.Info("Event for block sent to broadcaster", "block_number", blockNum)
+			engine.logger.Info("event for block sent to broadcaster", "block_number", blockNum)
 		}
 	}
 }
@@ -326,11 +326,11 @@ func (engine *Engine) broadcastViews(ctx context.Context) {
 
 		select {
 		case <-ctx.Done():
-			engine.logger.Info("Context cancelled, shutting down broadcaster.")
+			engine.logger.Info("context cancelled, shutting down broadcaster.")
 			return
 		case view, ok = <-engine.viewEventer:
 			if !ok {
-				engine.logger.Info("View eventer channel closed, shutting down broadcaster.")
+				engine.logger.Info("view eventer channel closed, shutting down broadcaster.")
 				return
 			}
 		}
@@ -375,7 +375,7 @@ func (engine *Engine) waitForBlockSynchronizedProtocols(ctx context.Context, tar
 			err := fmt.Errorf("timed out after %v waiting for protocols to sync to block %d", engine.maxWaitUntilSync, targetBlockNum)
 			engine.errorHandler(err)
 			engine.metrics.ErrorsTotal.WithLabelValues("sync_timeout").Inc()
-			engine.logger.Warn("Protocol sync timed out", "block_number", targetBlockNum, "timeout", engine.maxWaitUntilSync)
+			engine.logger.Warn("protocol sync timed out", "block_number", targetBlockNum, "timeout", engine.maxWaitUntilSync)
 			return
 
 		case <-ticker.C:

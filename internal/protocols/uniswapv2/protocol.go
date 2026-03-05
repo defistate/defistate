@@ -115,9 +115,9 @@ func SetupUniswapV2System(
 		start := time.Now()
 		defer func() {
 			cfg.Logger.Info(
-				"RegisterPool operation completed",
+				"register pool operation completed",
 				"duration", time.Since(start),
-				"protocol", "UniswapV2",
+				"protocol", "uniswap v2",
 				"pool_address", poolAddr.Hex(),
 				"error", err,
 			)
@@ -129,10 +129,10 @@ func SetupUniswapV2System(
 		start := time.Now()
 		defer func() {
 			cfg.Logger.Info(
-				"RegisterPools operation completed",
+				"register pools operation completed",
 				"duration", time.Since(start),
 				"pool_count", len(poolAddrs),
-				"protocol", "UniswapV2",
+				"protocol", "uniswap v2",
 			)
 		}()
 

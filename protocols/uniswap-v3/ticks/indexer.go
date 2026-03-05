@@ -191,7 +191,7 @@ func NewTickIndexer(
 				errorType = "resync"
 			}
 
-			cfg.Logger.Error("TickIndexer error occurred", "type", errorType, "error", err)
+			cfg.Logger.Error("tick indexer error occurred", "type", errorType, "error", err)
 			metrics.errorsTotal.WithLabelValues(errorType).Inc()
 			cfg.ErrorHandler(err) // Call the original handler
 		},
@@ -215,7 +215,7 @@ func NewTickIndexer(
 
 	// In NewTickIndexer, after starting goroutines...
 	tickIndexer.logger.Info(
-		"TickIndexer started successfully",
+		"tick indexer started successfully",
 		"init_frequency", cfg.InitFrequency,
 		"resync_frequency", cfg.ResyncFrequency,
 		"update_frequency", cfg.UpdateFrequency,
@@ -235,10 +235,10 @@ func (ti *TickIndexer) listenBlockEventer(ctx context.Context, newBlockEventer c
 			}
 			timer := prometheus.NewTimer(ti.metrics.blockProcessingDuration.WithLabelValues())
 			blockNum := block.NumberU64()
-			ti.logger.Debug("New block received by tick indexer", "block", blockNum)
+			ti.logger.Debug("new block received by tick indexer", "block", blockNum)
 			// Test the block's bloom filter. If it passes, process the block.
 			if ti.testBloomFunc(block.Bloom()) {
-				ti.logger.Debug("Block passed bloom filter", "block", blockNum)
+				ti.logger.Debug("block passed bloom filter", "block", blockNum)
 				if err := ti.handleNewBlock(ctx, block); err != nil {
 					// On error, we do not advance the block counter, allowing for potential retries.
 					ti.errorHandler(err)
@@ -296,7 +296,7 @@ func (ti *TickIndexer) startInitializer(ctx context.Context) {
 					delete(ti.pendingInit, id)
 				}
 				ti.logger.Info(
-					"Finished pool initialization run",
+					"finished pool initialization run",
 					"processed", len(batchIDs),
 					"successful", len(successfulIDs),
 				)
@@ -318,7 +318,7 @@ func (ti *TickIndexer) startUpdater(ctx context.Context) {
 		case update := <-ti.pendingUpdates:
 			// METRIC: On successful receive, decrement the queue depth gauge.
 			ti.logger.Debug(
-				"Applying tick updates",
+				"applying tick updates",
 				"pool_count", len(update.pools),
 			)
 			ti.metrics.pendingUpdatesQueue.Dec()
@@ -386,7 +386,7 @@ func (ti *TickIndexer) getLogsWithRetry(ctx context.Context, client ethclients.E
 		if attempt < maxAttempts {
 			select {
 			case <-time.After(ti.logRetryDelay):
-				ti.logger.Debug("Retrying logger fetch for block", "block", block.NumberU64(), "attempt", attempt)
+				ti.logger.Debug("retrying fetch for block", "block", block.NumberU64(), "attempt", attempt)
 				continue
 			case <-ctx.Done():
 				return nil, ctx.Err()
@@ -395,7 +395,7 @@ func (ti *TickIndexer) getLogsWithRetry(ctx context.Context, client ethclients.E
 	}
 
 	// If all retries are exhausted, assume no relevant logs exist.
-	ti.logger.Warn("No relevant logs found for block after all retries", "block", block.NumberU64(), "hash", blockHash.Hex())
+	ti.logger.Warn("no relevant logs found for block after all retries", "block", block.NumberU64(), "hash", blockHash.Hex())
 	return []types.Log{}, nil // Return an empty slice, not an error.
 }
 
@@ -477,7 +477,7 @@ func (ti *TickIndexer) handleNewBlock(ctx context.Context, b *types.Block) error
 	}
 
 	ti.logger.Info(
-		"Found tick updates in block",
+		"found tick updates in block",
 		"block", blockNum,
 		"pools_with_updates", len(finalPoolsToFetch),
 	)
@@ -507,18 +507,18 @@ func (ti *TickIndexer) applyTickUpdates(pools []common.Address, newDatasByPool [
 				// Check if the tick has become uninitialized.
 				if updatedTick.LiquidityGross.Cmp(big.NewInt(0)) == 0 {
 					// REMOVE the tick from the slice.
-					ti.logger.Debug("Removing zero-liquidity tick", "pool", poolAddr.Hex(), "tick_index", updatedTick.Index)
+					ti.logger.Debug("removing zero-liquidity tick", "pool", poolAddr.Hex(), "tick_index", updatedTick.Index)
 					ti.ticks[poolIndex] = append(ti.ticks[poolIndex][:foundIndex], ti.ticks[poolIndex][foundIndex+1:]...)
 				} else {
 					// UPDATE the existing tick.
-					ti.logger.Debug("Updating existing tick", "pool", poolAddr.Hex(), "tick_index", updatedTick.Index)
+					ti.logger.Debug("updating existing tick", "pool", poolAddr.Hex(), "tick_index", updatedTick.Index)
 					ti.ticks[poolIndex][foundIndex] = updatedTick
 				}
 			} else { // Case 2: The tick does not exist.
 				// If the tick has liquidity, it's a new tick that needs to be inserted.
 				if updatedTick.LiquidityGross.Cmp(big.NewInt(0)) > 0 {
 					// INSERT the new tick at the correct sorted position.
-					ti.logger.Debug("Inserting new tick", "pool", poolAddr.Hex(), "tick_index", updatedTick.Index)
+					ti.logger.Debug("inserting new tick", "pool", poolAddr.Hex(), "tick_index", updatedTick.Index)
 					ti.ticks[poolIndex] = append(ti.ticks[poolIndex], TickInfo{})
 					copy(ti.ticks[poolIndex][foundIndex+1:], ti.ticks[poolIndex][foundIndex:])
 					ti.ticks[poolIndex][foundIndex] = updatedTick
@@ -644,7 +644,7 @@ func (ti *TickIndexer) initializePools(ctx context.Context, batchIDs []uint64, b
 
 // resyncPools fetches the current on-chain state for all tracked pools and replaces the local state.
 func (ti *TickIndexer) resyncPools(ctx context.Context) {
-	ti.logger.Info("Starting tick state resync process")
+	ti.logger.Info("starting tick state resync process")
 	timer := prometheus.NewTimer(ti.metrics.resyncDuration.WithLabelValues())
 	defer timer.ObserveDuration()
 
@@ -663,7 +663,7 @@ func (ti *TickIndexer) resyncPools(ctx context.Context) {
 	copy(spacings, ti.spacing)
 	copy(lastUpdates, ti.lastUpdates)
 
-	ti.logger.Info("Starting tick state resync for all pools", "pool_count", len(addresses))
+	ti.logger.Info("starting tick state resync for all pools", "pool_count", len(addresses))
 	ti.mu.RUnlock()
 
 	if len(addresses) == 0 {
@@ -740,7 +740,7 @@ func (ti *TickIndexer) resyncPools(ctx context.Context) {
 		}
 	}
 
-	ti.logger.Info("Tick state resync complete", "pool_count", len(addresses))
+	ti.logger.Info("tick state resync complete", "pool_count", len(addresses))
 }
 
 // areTickSlicesEqual is a helper to compare two slices of TickInfo for equality.
@@ -767,7 +767,7 @@ func (ti *TickIndexer) setLastUpdatedAtBlock(blockNum uint64) {
 func (ti *TickIndexer) Add(pool uint64, address common.Address, spacing uint64) error {
 	ti.mu.Lock()
 	defer ti.mu.Unlock()
-	ti.logger.Info("Adding pool to pending initialization", "pool_id", pool, "address", address.Hex())
+	ti.logger.Info("adding pool to pending initialization", "pool_id", pool, "address", address.Hex())
 	if _, exists := ti.idToIndex[pool]; exists {
 		return ErrPoolExists
 	}
@@ -790,7 +790,7 @@ func (ti *TickIndexer) Remove(pool uint64) error {
 	}
 
 	addr := ti.address[indexToRemove]
-	ti.logger.Info("Removing pool from tick indexer", "pool_id", pool, "address", addr.Hex())
+	ti.logger.Info("removing pool from tick indexer", "pool_id", pool, "address", addr.Hex())
 	lastIndex := len(ti.id) - 1
 	if indexToRemove != lastIndex {
 		lastPoolID := ti.id[lastIndex]

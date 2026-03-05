@@ -47,9 +47,9 @@ type RegistrationError struct {
 // Error provides a descriptive message, distinguishing between background and block-specific errors.
 func (e *RegistrationError) Error() string {
 	if e.BlockNumber == 0 {
-		return fmt.Sprintf("CRITICAL initializer: failed to register new pool %s (tokens %s, %s): %v", e.PoolAddress.Hex(), e.Token0Address.Hex(), e.Token1Address.Hex(), e.Err)
+		return fmt.Sprintf("critical initializer: failed to register new pool %s (tokens %s, %s): %v", e.PoolAddress.Hex(), e.Token0Address.Hex(), e.Token1Address.Hex(), e.Err)
 	}
-	return fmt.Sprintf("CRITICAL block %d: failed to register new pool %s (tokens %s, %s): %v", e.BlockNumber, e.PoolAddress.Hex(), e.Token0Address.Hex(), e.Token1Address.Hex(), e.Err)
+	return fmt.Sprintf("critical block %d: failed to register new pool %s (tokens %s, %s): %v", e.BlockNumber, e.PoolAddress.Hex(), e.Token0Address.Hex(), e.Token1Address.Hex(), e.Err)
 }
 
 // DataConsistencyError indicates a critical internal state mismatch,
@@ -63,9 +63,9 @@ type DataConsistencyError struct {
 // Error provides a descriptive message, distinguishing between background and block-specific errors.
 func (e *DataConsistencyError) Error() string {
 	if e.BlockNumber == 0 {
-		return fmt.Sprintf("CRITICAL internal: data consistency error for pool %s: %s: %v", e.PoolAddress.Hex(), e.Details, e.Err)
+		return fmt.Sprintf("critical internal: data consistency error for pool %s: %s: %v", e.PoolAddress.Hex(), e.Details, e.Err)
 	}
-	return fmt.Sprintf("CRITICAL block %d: data consistency error for pool %s: %s: %v", e.BlockNumber, e.PoolAddress.Hex(), e.Details, e.Err)
+	return fmt.Sprintf("critical block %d: data consistency error for pool %s: %s: %v", e.BlockNumber, e.PoolAddress.Hex(), e.Details, e.Err)
 }
 
 // UpdateError indicates a failure to update the reserves of a known, existing pool.

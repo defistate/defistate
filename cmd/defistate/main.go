@@ -98,11 +98,14 @@ type AppErrorHandler struct {
 
 // Handle logs an error with the associated chain ID for context.
 func (h *AppErrorHandler) Handle(err error) {
-	h.logger.Error(
-		"a component reported an error",
-		"error", err,
-		"chain_id", h.chainID,
-	)
+	// @todo how should we process logs
+	/*
+		h.logger.Error(
+			"a component reported an error",
+			"error", err,
+			"chain_id", h.chainID,
+		)
+	*/
 }
 
 type ChainProtocolsProvider func(context.Context, chains.Dependencies) (
@@ -354,7 +357,7 @@ func main() {
 		close()
 	}
 
-	rootLogger.Info("Application started successfully")
+	rootLogger.Info("defistate started successfully")
 
 	select {
 	case <-ctx.Done(): // Wait for context cancellation (e.g., from an OS signal) to gracefully shut down.

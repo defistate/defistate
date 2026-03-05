@@ -133,9 +133,9 @@ func SetupUniswapV3System(ctx context.Context, cfg *UniswapV3SystemSetupConfig) 
 		start := time.Now()
 		defer func() {
 			cfg.Logger.Info(
-				"RegisterPool operation completed",
+				"register pool operation completed",
 				"duration", time.Since(start),
-				"protocol", "UniswapV3",
+				"protocol", "uniswap v3",
 				"pool_address", poolAddr.Hex(),
 				"error", err,
 			)
@@ -147,10 +147,10 @@ func SetupUniswapV3System(ctx context.Context, cfg *UniswapV3SystemSetupConfig) 
 		start := time.Now()
 		defer func() {
 			cfg.Logger.Info(
-				"RegisterPools operation completed",
+				"register pools operation completed",
 				"duration", time.Since(start),
 				"pool_count", len(poolAddrs),
-				"protocol", "UniswapV3",
+				"protocol", "uniswap v3",
 			)
 		}()
 

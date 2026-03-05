@@ -198,7 +198,7 @@ func newUniswapV2System(ctx context.Context, cfg *Config, registry *UniswapV2Reg
 		registerPools:    cfg.RegisterPools,
 		errorHandler: func(err error) {
 			errorType := determineErrorType(err)
-			cfg.Logger.Error("UniswapV2System internal error", "system", cfg.SystemName, "type", errorType, "error", err)
+			cfg.Logger.Error("internal error", "system", cfg.SystemName, "type", errorType, "error", err)
 			metrics.ErrorsTotal.WithLabelValues(errorType).Inc()
 
 			// 3. Call the user's external handler.
@@ -219,7 +219,7 @@ func newUniswapV2System(ctx context.Context, cfg *Config, registry *UniswapV2Reg
 	// store initial view
 	initialView := viewRegistry(registry)
 	system.cachedView.Store(&initialView)
-	system.logger.Info("UniswapV2System started", "system", system.systemName)
+	system.logger.Info("uniswap v2 system started", "system", system.systemName)
 	go system.listenBlockEventer(ctx)
 	go system.startPoolInitializer(ctx)
 	go system.pruneInactivePools(
@@ -249,7 +249,7 @@ func (s *UniswapV2System) listenBlockEventer(ctx context.Context) {
 			}
 			timer.ObserveDuration()
 		case <-ctx.Done():
-			s.logger.Info("UniswapV2System stopping due to context cancellation.")
+			s.logger.Info("stopping due to context cancellation.")
 			return
 		}
 	}
@@ -295,7 +295,7 @@ func (s *UniswapV2System) runPendingInitializations(ctx context.Context) {
 		return
 	}
 
-	s.logger.Info("Running pool initializer", "count", len(poolsToInit))
+	s.logger.Info("running pool initializer", "count", len(poolsToInit))
 
 	token0s, token1s, poolTypes, feeBps, reserve0s, reserve1s, errs := s.poolInitializer(ctx, poolsToInit, s.getClient)
 
@@ -360,7 +360,7 @@ func (s *UniswapV2System) handleNewBlock(ctx context.Context, b *types.Block) er
 	blockNum := b.NumberU64()
 	start := time.Now()
 	defer func() {
-		s.logger.Info("Processed new block", "blockNumber", blockNum, "tx_count", len(b.Transactions()), "duration", time.Since(start))
+		s.logger.Info("processed new block", "blockNumber", blockNum, "tx_count", len(b.Transactions()), "duration", time.Since(start))
 	}()
 
 	// load cached view
@@ -426,7 +426,7 @@ func (s *UniswapV2System) handleBlockLogs(ctx context.Context, b *types.Block) e
 
 	filterStart := time.Now()
 	logs, err := s.getLogs(ctx, client, b)
-	s.logger.Info("FilterLogs RPC call completed", "blockNumber", blockNum, "duration", time.Since(filterStart))
+	s.logger.Info("filter logs rpc call completed", "blockNumber", blockNum, "duration", time.Since(filterStart))
 	if err != nil {
 		return fmt.Errorf("block %d: failed to filter logs: %w", blockNum, err)
 	}
@@ -474,7 +474,7 @@ func (s *UniswapV2System) handleBlockLogs(ctx context.Context, b *types.Block) e
 		s.metrics.PendingInitQueueSize.WithLabelValues().Add(float64(newPendingCount))
 	}
 	s.logger.Info(
-		"Discovered new pools in block",
+		"discovered new pools in block",
 		"blockNumber", blockNum,
 		"count", len(discoveredPoolAddrs),
 	)

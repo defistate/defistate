@@ -279,7 +279,7 @@ func NewUniswapV3System(ctx context.Context, cfg *Config) (*UniswapV3System, err
 		metrics:              metrics,
 		errorHandler: func(err error) {
 			errorType := determineErrorType(err)
-			cfg.Logger.Error("UniswapV3System internal error", "system", cfg.SystemName, "type", errorType, "error", err)
+			cfg.Logger.Error("internal error", "system", cfg.SystemName, "type", errorType, "error", err)
 			metrics.ErrorsTotal.WithLabelValues(errorType).Inc()
 			cfg.ErrorHandler(err)
 
@@ -290,7 +290,7 @@ func NewUniswapV3System(ctx context.Context, cfg *Config) (*UniswapV3System, err
 
 	emptyView := make([]PoolView, 0)
 	system.cachedView.Store(&emptyView)
-	system.logger.Info("UniswapV3System started", "system", system.systemName)
+	system.logger.Info("uniswap v3 system started", "system", system.systemName)
 
 	go system.listenBlockEventer(ctx)
 	go system.startPoolInitializer(ctx)
@@ -311,7 +311,7 @@ func (s *UniswapV3System) listenBlockEventer(ctx context.Context) {
 			timer := prometheus.NewTimer(s.metrics.BlockProcessingDur.WithLabelValues())
 
 			if !s.testBloom(b.Bloom()) {
-				s.logger.Debug("Block bloom filter test failed, skipping detailed processing", "block", b.NumberU64())
+				s.logger.Debug("block bloom filter test failed, skipping detailed processing", "block", b.NumberU64())
 				s.setLastUpdatedAtBlock(b.NumberU64())
 				s.metrics.LastProcessedBlock.WithLabelValues().Set(float64(b.NumberU64()))
 				timer.ObserveDuration()
@@ -377,7 +377,7 @@ func (s *UniswapV3System) pruneInactivePools(ctx context.Context, ticker *time.T
 // handleNewBlock processes a single block's events.
 func (s *UniswapV3System) handleNewBlock(ctx context.Context, b *types.Block) error {
 	blockNum := b.NumberU64()
-	s.logger.Debug("Processing new block", "blockNumber", blockNum, "tx_count", len(b.Transactions()))
+	s.logger.Debug("processing new block", "blockNumber", blockNum, "tx_count", len(b.Transactions()))
 
 	prevView := *s.cachedView.Load()
 	poolsToFetch := make(map[common.Address]uint64)
@@ -450,7 +450,7 @@ func (s *UniswapV3System) handleBlockLogs(ctx context.Context, b *types.Block) e
 
 	filterStart := time.Now()
 	logs, err := s.getLogs(ctx, client, b)
-	s.logger.Info("FilterLogs RPC call completed", "blockNumber", blockNum, "duration", time.Since(filterStart))
+	s.logger.Info("filter logs rpc call completed", "blockNumber", blockNum, "duration", time.Since(filterStart))
 	if err != nil {
 		return fmt.Errorf("block %d: failed to filter logs: %w", blockNum, err)
 	}
@@ -509,7 +509,7 @@ func (s *UniswapV3System) handleBlockLogs(ctx context.Context, b *types.Block) e
 		s.metrics.PendingInitQueueSize.WithLabelValues().Add(float64(newPendingCount))
 	}
 	s.logger.Info(
-		"Discovered new pools in block",
+		"discovered new pools in block",
 		"blockNumber", blockNum,
 		"count", len(discoveredPoolAddrs),
 	)
@@ -534,7 +534,7 @@ func (s *UniswapV3System) runPendingInitializations(ctx context.Context) {
 		}
 	}()
 
-	s.logger.Info("Starting pending pool initialization run", "pool_count", len(poolsToInit))
+	s.logger.Info("starting pending pool initialization run", "pool_count", len(poolsToInit))
 	s.metrics.PendingInitQueueSize.WithLabelValues().Set(0)
 
 	if len(poolsToInit) == 0 {
