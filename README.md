@@ -5,17 +5,6 @@
 
 ---
 
-# Overview
-
-At its core is the **DeFiState Engine**, which:
-
-1. Initializes with a set of protocol providers
-2. Polls each provided protocol indexer for state at the current block
-3. Aggregates the data into a unified **State object**
-4. Broadcasts the state to subscribers via a **WebSocket JSON-RPC stream**
-
----
-
 # Architecture
 
 ```
