@@ -5,7 +5,7 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o /app/dse ./cmd/dse
+RUN CGO_ENABLED=0 GOOS=linux go build -o /app/defistate ./cmd/defistate
 
 # --- Foundry Stage: use the official image (already has anvil) ---
 FROM ghcr.io/foundry-rs/foundry:v1.5.1 AS foundry
@@ -17,10 +17,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 
 WORKDIR /app
 
-COPY --from=builder /app/dse .
+COPY --from=builder /app/defistate .
 COPY --from=foundry /usr/local/bin/anvil /usr/local/bin/anvil
 
 EXPOSE 8080 2112 6060
 
 RUN anvil --version
-CMD ["./dse", "-config", "config.yaml"]
+CMD ["./defistate", "-config", "config.yaml"]

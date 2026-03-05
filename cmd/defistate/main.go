@@ -24,7 +24,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/defistate/defistate/cmd/dse/config"
+	"github.com/defistate/defistate/cmd/defistate/config"
 	"github.com/defistate/defistate/differ"
 	"github.com/defistate/defistate/engine"
 	"github.com/defistate/defistate/internal/chains"
