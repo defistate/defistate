@@ -23,4 +23,4 @@ COPY --from=foundry /usr/local/bin/anvil /usr/local/bin/anvil
 EXPOSE 8080 2112 6060
 
 RUN anvil --version
-CMD ["./dse", "-config", "config.yml"]
+CMD ["./dse", "-config", "config.yaml"]

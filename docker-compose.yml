@@ -13,4 +13,4 @@ services:
       - "${DSE_METRICS_PORT:-2112}:2112"
       - "${DSE_PPROF_PORT:-6060}:6060"
     volumes:
-      - ./config.yml:/app/config.yml
+      - ./config.yaml:/app/config.yaml
