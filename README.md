@@ -126,7 +126,7 @@ docker compose build
 docker compose up
 ```
 
-The container will start the DeFiState system using a `config.yml` file located in the repository root.
+The container will start the DeFiState system using a `config.yaml` file located in the repository root.
 
 ---
 
