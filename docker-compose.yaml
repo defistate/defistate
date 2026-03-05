@@ -9,8 +9,8 @@ services:
     ports:
       # The host port (left side) is flexible via the .env file.
       # The container port (right side) is fixed at 8080.
-      - "${DSE_APP_PORT:-8080}:8080"
-      - "${DSE_METRICS_PORT:-2112}:2112"
-      - "${DSE_PPROF_PORT:-6060}:6060"
+      - "${DSE_JSON_RPC_PORT:-8080}:8080"
+      - "127.0.0.1:${DSE_METRICS_PORT:-2112}:2112"
+      - "127.0.0.1:${DSE_PPROF_PORT:-6060}:6060"
     volumes:
       - ./config.yaml:/app/config.yaml
