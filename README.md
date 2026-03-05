@@ -61,8 +61,8 @@ Currently supported protocol indexers:
 When new tokens are discovered, DeFiState analyzes them using a **Foundry Anvil fork**.
 
 This allows the system to determine:
-- transfer gas cost
-- transfer fees
+- token transfer gas cost
+- token transfer fees
 
 ---
 
