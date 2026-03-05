@@ -535,7 +535,7 @@ func startMetricsServer(
 	pprofMux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 
 	pprofSrv := &http.Server{
-		Addr:    fmt.Sprintf("0.0.0.0:%d", pprofPort),
+		Addr:    fmt.Sprintf(":%d", pprofPort),
 		Handler: pprofMux,
 	}
 
