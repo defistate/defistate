@@ -1,7 +1,10 @@
-
 # DeFiState
 
-**DeFiState** is an open infrastructure project for producing **block-synchronized streams of DeFi protocol state on EVM chains**. The system aggregates data from protocol indexers and exposes the resulting state through a **JSON-RPC interface**, enabling applications to consume real-time DeFi state using a simple subscription.
+**DeFiState** is an open infrastructure project for producing **block-synchronized streams of DeFi protocol state across EVM chains**.
+
+The system aggregates data from protocoln indexers and exposes the resulting state through a **WebSocket JSON-RPC stream**, enabling applications to consume real-time DeFi state on every block using a simple subscription.
+
+DeFiState is designed for developers who need a continuously updated, structured view of onchain protocol state without building their own end-to-end indexing pipeline.
 
 ---
 
@@ -13,46 +16,57 @@ EVM Chain
    │ new block
    ▼
 Protocol Indexers
-(Uniswap V2, V3, ERC20, etc.)
+(Uniswap V2, Uniswap V3, ERC20, Pool Registry, etc.)
    │
    ▼
 DeFiState Engine
    │
-   │ aggregate data
+   │ aggregate protocol state
    ▼
 WebSocket JSON-RPC Stream
    │
    ▼
-Clients 
+Chain Clients
+   │
+   │ process raw state into indexed chain-specific views
+   ▼
+client.OnNewBlock(handler)
+
 ```
 
 ---
 
 # Core Components
 
-## Engine
+## DeFiState Engine
 
-The **DeFiState Engine** orchestrates the system.
+The **DeFiState Engine** orchestrates block-synchronized DeFi state production.
 
 Responsibilities:
 
 - block synchronization
-- state aggregation
+- protocol state aggregation
+- construction of a unified per-block state object
+- broadcasting state updates to stream consumers
 
 On every block:
 
-1. a new **State** object is constructed using aggregated data
-2. the state is broadcast to subscribers
+1. protocol systems synchronize to the latest block
+2. a new `State` object is constructed
+3. the state is streamed to connected consumers
 
 ---
 
 ## Protocol Indexers
 
-Currently supported protocol indexers:
+DeFiState currently includes indexers for:
 
 - **Uniswap V2**
 - **Uniswap V3**
 - **ERC20 Tokens**
+- **Pool Registry**
+- **Token–Pool Graph**
+
 
 ---
 
@@ -60,26 +74,27 @@ Currently supported protocol indexers:
 
 When new tokens are discovered, DeFiState analyzes them using a **Foundry Anvil fork**.
 
-This allows the system to determine:
-- token transfer gas cost
-- token transfer fees
+This allows the system to determine token characteristics such as:
+
+- transfer gas cost
+- fee-on-transfer behavior
 
 ---
 
 ## Token–Pool Graph
 
-DeFiState constructs a **graph representing relationships between tokens and pools**.
+DeFiState constructs a graph of token-to-pool relationships.
 
-This structure is also streamed to consumers as part of the state.
+This graph is included in the state stream and enables downstream applications to efficiently reason about liquidity connectivity across indexed protocols.
 
 ---
 
 # Ports
 
-When the system starts, the following ports are available:
+When the system starts, the following ports are exposed:
 
 | Port | Description |
-|-----|-------------|
+|------|-------------|
 | 8080 | DeFiState WebSocket JSON-RPC stream |
 | 2112 | Prometheus metrics |
 | 6060 | pprof profiling |
@@ -88,15 +103,15 @@ When the system starts, the following ports are available:
 
 # Configuration
 
-DeFiState is configured using a YAML configuration file provided to the container at startup.
+DeFiState is configured using a YAML file provided to the container at startup.
 
-Example configuration:
+Example:
 
 ```yaml
-chain_id: 1 # EVM chain Id
+chain_id: 1 # EVM chain ID
 chain: ethereum # chain name
 
-# Configuration for the RPC client pool used by the systems
+# RPC client pool used by the system
 client_manager:
   rpc_urls:
     - ws://your-evm-rpc-1
@@ -104,9 +119,9 @@ client_manager:
 
 # Core engine behavior settings
 engine:
-  max_wait_until_sync: 1s # Maximum time the engine waits for protocol synchronization per block
+  max_wait_until_sync: 1s # maximum time the engine waits for protocol synchronization per block
 
-# Configuration for the Anvil fork used for simulations
+# Foundry Anvil fork configuration used for token analysis
 fork:
   rpc_url: ws://your-evm-rpc
   token_overrides: # optional
@@ -119,22 +134,21 @@ fork:
 
 # Running DeFiState
 
-Start the full system using Docker:
+Start the full system with Docker:
 
-```
+```bash
 docker compose up --build
-
 ```
 
-The container will start the DeFiState system using a `config.yaml` file located in the repository root.
+The container starts the DeFiState system using a `config.yaml` file located in the repository root.
 
 ---
 
 # Consuming the Stream
 
-DeFiState provides client libraries for connecting to the WebSocket JSON-RPC stream and receiving block-synchronized protocol state.
+DeFiState provides chain-specific client packages for connecting to the WebSocket JSON-RPC stream and consuming synchronized DeFi state.
 
-To establish a connection, use the `DialJSONRPCStream` function from the appropriate client package located in the `clients/chains` directory.
+To establish a connection, use the `DialJSONRPCStream` function from the appropriate package in `clients/chains`.
 
 ```go
 func DialJSONRPCStream(
@@ -146,78 +160,163 @@ func DialJSONRPCStream(
 ) (*Client, error)
 ```
 
-This function establishes the connection and starts the internal processing loop.  
-The returned `Client` remains active until the provided context is cancelled.
+This function:
+
+- establishes the JSON-RPC stream connection
+- initializes state decoding and patching
+- starts the internal background processing loop
+- returns a chain-specific client instance
+
+The returned client remains active until the provided context is cancelled.
 
 ---
 
 ## Accessing State Updates
 
-The client exposes a channel that streams **block-synchronized State objects**.
+Use `OnNewBlock` to register a handler that is executed whenever a new block is fully processed.
 
 ```go
-func (p *Client) State() <-chan *State {
-    return p.stateCh
-}
+func (p *Client) OnNewBlock(handler func(context.Context, *State) error) error
 ```
 
-Consumers receive updates by reading from this channel.
+The handler receives a chain-specific, indexed `State` snapshot for that block.
+
+Each client also exposes:
+
+```go
+func (p *Client) State() *State
+```
+
+This returns the latest processed state snapshot stored by the client.
 
 ---
 
 ## Example
 
 ```go
-client, err := chain.DialJSONRPCStream(
-    ctx,
-    "ws://localhost:8080",
-    logger,
-    prometheusRegistry,
-)
-if err != nil {
-    panic(err)
-}
+package main
 
-for state := range client.State() {
-    // process block-synchronized DeFi state
+import (
+	"context"
+	"log/slog"
+	"os"
+	"os/signal"
+	"syscall"
+
+	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/defistate/defistate/clients/chains/ethereum"
+)
+
+func main() {
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	registry := prometheus.NewRegistry()
+
+	client, err := ethereum.DialJSONRPCStream(
+		ctx,
+		"ws://localhost:8080",
+		logger,
+		registry,
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	err = client.OnNewBlock(func(ctx context.Context, state *ethereum.State) error {
+		logger.Info("new block processed",
+			"number", state.Block.Number,
+			"timestamp", state.Timestamp,
+		)
+
+		// Access and utilize indexed protocol state
+		v2Pools := state.UniswapV2.All()
+		v3Pools := state.UniswapV3.All()
+		graph := state.Graph
+
+		_ = v2Pools
+		_ = v3Pools
+		_ = graph
+
+
+
+		return nil
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	<-ctx.Done()
 }
 ```
 
-Each `State` object contains the aggregated protocol data produced by the DeFiState engine for that block.
+---
+
+## Chain Client State
+
+Chain-specific clients transform engine state into higher-level indexed views.
+
+For example, the Ethereum client exposes a state structure shaped like:
+
+```go
+type State struct {
+    Tokens           clients.IndexedTokenSystem
+    Pools            clients.IndexedPoolRegistry
+    UniswapV2        clients.IndexedUniswapV2
+    UniswapV3        clients.IndexedUniswapV3
+    PancakeswapV3    clients.IndexedUniswapV3
+    ProtocolResolver *clients.ProtocolResolver
+    Graph            *poolregistry.TokenPoolsRegistryView
+    Block            engine.BlockSummary
+    Timestamp        uint64
+}
+```
+
+This gives downstream applications direct access to indexed protocol-specific views, token and pool registries, graph structures, and block metadata.
 
 ---
 
 # Supported Chains
 
+Current chain support includes:
+
 - Ethereum
-
 - Base
-
 - Arbitrum
-
 - BSC (BNB Smart Chain)
-
 - Celo
-
 - Katana
-
 - PulseChain
+
+---
 
 # Roadmap
 
-The DeFiState project will continue evolving with a focus on expanding protocol coverage, improving indexers, and strengthening observability.
+DeFiState will continue evolving with a focus on broader protocol support, stronger indexing performance, and better system observability.
 
-### Protocol Coverage
+## Protocol Coverage
 
 Expand support for additional DeFi protocols across EVM chains.
 
-### Improved Indexers
+## Improved Indexers
 
-Continue improving the performance and reliability of protocol indexers, focusing on faster synchronization, reduced RPC overhead and persisting indexed state.
+Continue improving the performance and reliability of protocol indexers, with emphasis on:
 
-### Monitoring & Observability
+- faster synchronization
+- reduced RPC overhead
+- more efficient state handling
+- persisted indexed state
 
-Enhance monitoring capabilities using the exposed Prometheus metrics to provide deeper visibility into performance and system health.
+## Monitoring and Observability
+
+Expand Prometheus metrics and profiling support to provide deeper visibility into:
+
+- synchronization health
+- indexing latency
+- stream performance
+- client processing behavior
 
 ---
 
