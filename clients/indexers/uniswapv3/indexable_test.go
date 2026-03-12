@@ -21,16 +21,20 @@ func TestIndexableUniswapV3System(t *testing.T) {
 	addrUSDC := common.HexToAddress("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")
 	addrPool := common.HexToAddress("0x88e6A0c2dDD26feEB64f039a2c41296fcB3f5640")
 
+	// Define the identity constant for this test run
+	const testProtocolID = engine.ProtocolID("test-uniswap-v3-protocol")
+
 	// Setup Tokens
 	tokenMock := mocks.NewMockIndexedTokenSystem([]token.TokenView{
 		{ID: 0, Address: addrWETH, Symbol: "WETH"},
 		{ID: 1, Address: addrUSDC, Symbol: "USDC"},
 	})
 
-	// Setup Pool Registry with Protocol Mapping
+	// Setup Pool Registry
+	// Note: The registry is used to resolve the pool's Address from its ID
 	registryMock := mocks.NewMockIndexedPoolRegistry(poolregistry.PoolRegistryView{
 		Protocols: map[uint16]engine.ProtocolID{
-			3: "uniswap_v3_ethereum",
+			3: testProtocolID,
 		},
 	})
 
@@ -62,8 +66,8 @@ func TestIndexableUniswapV3System(t *testing.T) {
 	}
 
 	// --- 3. Run the Indexer ---
-	// Note: We now pass the mocks into the constructor
-	indexer, err := NewIndexableUniswapV3System(testPools, tokenMock, registryMock)
+	// We pass the explicit ProtocolID to ensure the resulting state is correctly tagged.
+	indexer, err := NewIndexableUniswapV3System(testProtocolID, testPools, tokenMock, registryMock)
 	require.NoError(t, err)
 	require.NotNil(t, indexer)
 
@@ -73,7 +77,7 @@ func TestIndexableUniswapV3System(t *testing.T) {
 		pool, found := indexer.GetByID(201)
 		assert.True(t, found)
 
-		// Verify System IDs (New feature)
+		// Verify System IDs
 		assert.Equal(t, uint64(201), pool.IDs.Pool)
 		assert.Equal(t, uint64(0), pool.IDs.Token0)
 
@@ -81,7 +85,9 @@ func TestIndexableUniswapV3System(t *testing.T) {
 		assert.Equal(t, addrPool, pool.Address)
 		assert.Equal(t, addrWETH, pool.Token0)
 		assert.Equal(t, addrUSDC, pool.Token1)
-		assert.Equal(t, "uniswap_v3_ethereum", pool.Protocol)
+
+		// This confirms the Indexer properly applied the passed ProtocolID
+		assert.Equal(t, string(testProtocolID), pool.Protocol)
 
 		// Verify Complex State (Ticks)
 		require.Len(t, pool.Ticks, 2)
@@ -103,10 +109,12 @@ func TestIndexableUniswapV3System(t *testing.T) {
 		allPools := indexer.All()
 		assert.Len(t, allPools, 1)
 		assert.Equal(t, int64(200000), allPools[0].Tick)
+		// Ensure the copy doesn't break the protocol tagging
+		assert.Equal(t, string(testProtocolID), allPools[0].Protocol)
 	})
 
 	t.Run("Empty Initialization", func(t *testing.T) {
-		emptyIdx, err := NewIndexableUniswapV3System([]uniswapv3.PoolView{}, tokenMock, registryMock)
+		emptyIdx, err := NewIndexableUniswapV3System(testProtocolID, []uniswapv3.PoolView{}, tokenMock, registryMock)
 		require.NoError(t, err)
 		assert.Len(t, emptyIdx.All(), 0)
 	})

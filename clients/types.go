@@ -59,6 +59,7 @@ type IndexedUniswapV2 interface {
 // UniswapV2Indexer defines the interface for any component that can index Uniswap V2 pools.
 type UniswapV2Indexer interface {
 	Index(
+		protocolID engine.ProtocolID,
 		pools []uniswapv2.PoolView,
 		tokenRegistry IndexedTokenSystem,
 		poolRegistry IndexedPoolRegistry,
@@ -85,6 +86,7 @@ type IndexedUniswapV3 interface {
 // Always check Pool.Type to confirm the actual pool type
 type UniswapV3Indexer interface {
 	Index(
+		protocolID engine.ProtocolID,
 		pools []uniswapv3.PoolView,
 		tokenRegistry IndexedTokenSystem,
 		poolRegistry IndexedPoolRegistry,

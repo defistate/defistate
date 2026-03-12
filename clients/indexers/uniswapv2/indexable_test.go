@@ -20,6 +20,9 @@ func TestIndexableUniswapV2System(t *testing.T) {
 	addrUSDC := common.HexToAddress("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")
 	addrPool := common.HexToAddress("0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc")
 
+	// Define our identity constant
+	const testProtocolID = engine.ProtocolID("uniswap_v2_ethereum")
+
 	// Setup Mock Token System
 	tokenMock := mocks.NewMockIndexedTokenSystem([]token.TokenView{
 		{ID: 1, Address: addrWETH, Symbol: "WETH", Decimals: 18},
@@ -27,10 +30,9 @@ func TestIndexableUniswapV2System(t *testing.T) {
 	})
 
 	// Setup Mock Pool Registry
-	// Note: We define the protocol mapping (uint16 -> string) here
 	registryMock := mocks.NewMockIndexedPoolRegistry(poolregistry.PoolRegistryView{
 		Protocols: map[uint16]engine.ProtocolID{
-			1: "uniswap_v2_ethereum",
+			1: testProtocolID,
 		},
 	})
 
@@ -54,8 +56,8 @@ func TestIndexableUniswapV2System(t *testing.T) {
 	}
 
 	// --- 3. Run the Indexer ---
-	// This uses the mocks to "Hydrate" the PoolView into a full Pool struct
-	indexer, err := NewIndexableUniswapV2System(testPools, tokenMock, registryMock)
+	// Updated signature: now takes ProtocolID as the first argument
+	indexer, err := NewIndexableUniswapV2System(testProtocolID, testPools, tokenMock, registryMock)
 	require.NoError(t, err)
 	require.NotNil(t, indexer)
 
@@ -67,11 +69,14 @@ func TestIndexableUniswapV2System(t *testing.T) {
 
 		// Verify Hydration worked
 		assert.Equal(t, addrPool, pool.Address)
-		assert.Equal(t, "uniswap_v2_ethereum", pool.Protocol)
+
+		// This confirms the Indexer properly applied the passed ProtocolID
+		assert.Equal(t, string(testProtocolID), pool.Protocol)
 
 		// Explicitly check uint16 FeeBps
 		assert.Equal(t, uint16(30), pool.FeeBps)
 	})
+
 	t.Run("Lookup by Address", func(t *testing.T) {
 		pool, found := indexer.GetByAddress(addrPool)
 		assert.True(t, found)
@@ -87,14 +92,16 @@ func TestIndexableUniswapV2System(t *testing.T) {
 		// Add pool 600 to registry so it passes the first check
 		registryMock.Add(poolregistry.PoolView{ID: 600, Key: poolregistry.PoolKey{}})
 
-		_, err := NewIndexableUniswapV2System(brokenPools, tokenMock, registryMock)
+		_, err := NewIndexableUniswapV2System(testProtocolID, brokenPools, tokenMock, registryMock)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "token0 with ID 999 not found")
 	})
 
 	t.Run("All Method Integrity", func(t *testing.T) {
 		all := indexer.All()
+		// Fixed: Your previous logic had a bug making a slice of length 1 regardless of data
 		assert.Len(t, all, 1)
 		assert.Equal(t, addrPool, all[0].Address)
+		assert.Equal(t, string(testProtocolID), all[0].Protocol)
 	})
 }

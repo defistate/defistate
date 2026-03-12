@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	clients "github.com/defistate/defistate/clients"
+	"github.com/defistate/defistate/engine"
 	uniswapv2 "github.com/defistate/defistate/protocols/uniswap-v2"
 	"github.com/ethereum/go-ethereum/common"
 )
@@ -19,11 +20,12 @@ func New() *Indexer {
 // Index creates an indexed Uniswap V2 system from a raw slice of pool views,
 // resolving IDs to full addresses using the provided registries.
 func (i *Indexer) Index(
+	protocolID engine.ProtocolID,
 	pools []uniswapv2.PoolView,
 	tokenRegistry clients.IndexedTokenSystem,
 	poolRegistry clients.IndexedPoolRegistry,
 ) (clients.IndexedUniswapV2, error) {
-	return NewIndexableUniswapV2System(pools, tokenRegistry, poolRegistry)
+	return NewIndexableUniswapV2System(protocolID, pools, tokenRegistry, poolRegistry)
 }
 
 // IndexableUniswapV2System provides fast, indexed access to Uniswap V2 pool data.
@@ -44,6 +46,7 @@ type IndexableUniswapV2System struct {
 
 // NewIndexableUniswapV2System creates a new indexed Uniswap V2 system.
 func NewIndexableUniswapV2System(
+	protocolID engine.ProtocolID,
 	sourcePools []uniswapv2.PoolView,
 	tokenRegistry clients.IndexedTokenSystem,
 	poolRegistry clients.IndexedPoolRegistry,
@@ -57,8 +60,6 @@ func NewIndexableUniswapV2System(
 	// 2. Pre-allocate maps to avoid resizing and rehashing during the loop.
 	byAddress := make(map[common.Address]int, count)
 	byID := make(map[uint64]int, count)
-
-	protocols := poolRegistry.GetProtocols()
 
 	for i, p := range sourcePools {
 		// --- Registry Lookups ---
@@ -81,11 +82,6 @@ func NewIndexableUniswapV2System(
 		token1, ok := tokenRegistry.GetByID(p.Token1)
 		if !ok {
 			return nil, fmt.Errorf("token1 with ID %d not found in indexed token registry", p.Token1)
-		}
-
-		protocolID, ok := protocols[pr.Protocol]
-		if !ok {
-			return nil, fmt.Errorf("protocol ID %d for pool %d not found in registry protocols", pr.Protocol, p.ID)
 		}
 
 		// --- Construction ---

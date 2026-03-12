@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	clients "github.com/defistate/defistate/clients"
@@ -27,17 +29,18 @@ import (
 
 // State is the high-level, indexed and graphed representation of the DeFi state.
 type State struct {
-	IndexedTokenSystem  clients.IndexedTokenSystem
-	IndexedPoolRegistry clients.IndexedPoolRegistry
-	IndexedUniswapV2    clients.IndexedUniswapV2
-	IndexedUniswapV3    clients.IndexedUniswapV3
-	ProtocolResolver    *clients.ProtocolResolver
-	Graph               *poolregistry.TokenPoolsRegistryView
-	Block               engine.BlockSummary
-	Timestamp           uint64
+	Tokens           clients.IndexedTokenSystem
+	Pools            clients.IndexedPoolRegistry
+	UniswapV2        clients.IndexedUniswapV2
+	UniswapV3        clients.IndexedUniswapV3
+	PancakeswapV3    clients.IndexedUniswapV3
+	ProtocolResolver *clients.ProtocolResolver
+	Graph            *poolregistry.TokenPoolsRegistryView
+	Block            engine.BlockSummary
+	Timestamp        uint64
 }
 
-// IndexerConfig groups all protocol indexers.
+// IndexerConfig groups all protocol indexers for structured initialization.
 type IndexerConfig struct {
 	Token        clients.TokenIndexer
 	PoolRegistry clients.PoolRegistryIndexer
@@ -45,7 +48,7 @@ type IndexerConfig struct {
 	UniswapV3    clients.UniswapV3Indexer
 }
 
-// Config now looks incredibly clean.
+// Config defines the required dependencies for the Base client.
 type Config struct {
 	Client            clients.Client
 	Logger            clients.Logger
@@ -53,7 +56,6 @@ type Config struct {
 	MetricsRegisterer prometheus.Registerer
 }
 
-// Exported errors for Processor config validation, allowing for specific error checking in tests.
 var (
 	ErrClientRequired              = errors.New("config validation failed: Client is required")
 	ErrLoggerRequired              = errors.New("config validation failed: Logger is required")
@@ -62,6 +64,12 @@ var (
 	ErrUniswapV2IndexerRequired    = errors.New("config validation failed: UniswapV2Indexer is required")
 	ErrUniswapV3IndexerRequired    = errors.New("config validation failed: UniswapV3Indexer is required")
 	ErrMetricsRegistererRequired   = errors.New("config validation failed: MetricsRegisterer is required")
+)
+
+const (
+	UniswapV2ProtocolID     = engine.ProtocolID("uniswap-v2-base-mainnet")
+	UniswapV3ProtocolID     = engine.ProtocolID("uniswap-v3-base-mainnet")
+	PancakeswapV3ProtocolID = engine.ProtocolID("pancakeswap-v3-base-mainnet")
 )
 
 func (i *IndexerConfig) Validate() error {
@@ -90,19 +98,11 @@ func (c *Config) Validate() error {
 	if c.MetricsRegisterer == nil {
 		return ErrMetricsRegistererRequired
 	}
-
-	// Delegate grouped validation
-	if err := c.Indexers.Validate(); err != nil {
-		return err
-	}
-
-	return nil
+	return c.Indexers.Validate()
 }
 
-// metrics holds all the Prometheus collectors for the Processor manager.
 type metrics struct {
 	rawStateProcessed  prometheus.Counter
-	stateUpdateDropped prometheus.Counter
 	processingDuration *prometheus.HistogramVec
 }
 
@@ -111,11 +111,17 @@ type Client struct {
 	logger   clients.Logger
 	indexers IndexerConfig
 	metrics  *metrics
-	stateCh  chan *State
+
+	// Pull Pattern: High-performance atomic pointer for current state snapshots.
+	latestState atomic.Pointer[State]
+
+	// Push Pattern: Thread-safe callback registry for block events.
+	handlerMutex sync.RWMutex
+	onNewBlock   func(context.Context, *State) error
+	isRegistered bool
 }
 
-// DialJSONRPCStream establishes the connection and starts the processing loop.
-// The returned Client will remain active until the provided ctx is cancelled.
+// DialJSONRPCStream initializes the network connection and background processing loop.
 func DialJSONRPCStream(
 	ctx context.Context,
 	url string,
@@ -124,26 +130,21 @@ func DialJSONRPCStream(
 	opts ...Option,
 ) (*Client, error) {
 
-	stateOps, err := stateops.NewStateOps(
-		logger.With("component", "state-ops"),
-		prometheusRegistry,
-	)
+	stateOps, err := stateops.NewStateOps(logger.With("component", "state-ops"), prometheusRegistry)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create state ops: %w", err)
 	}
 
-	clientCfg := jsonrpcclient.Config{
+	client, err := jsonrpcclient.NewClient(ctx, jsonrpcclient.Config{
 		URL:              url,
 		Logger:           logger.With("component", "json-rpc-client"),
 		BufferSize:       100,
 		StatePatcher:     stateOps.Patch,
 		StateDecoder:     stateOps.DecodeStateJSON,
 		StateDiffDecoder: stateOps.DecodeStateDiffJSON,
-	}
-
-	client, err := jsonrpcclient.NewClient(ctx, clientCfg)
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to dial defistate stream url: %w", err)
+		return nil, fmt.Errorf("failed to dial defistate stream: %w", err)
 	}
 
 	cfg := &Config{
@@ -158,79 +159,85 @@ func DialJSONRPCStream(
 		MetricsRegisterer: prometheusRegistry,
 	}
 
-	return NewClient(ctx, cfg)
-
+	instance, err := NewClient(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	for _, opt := range opts {
+		opt.apply(instance)
+	}
+	return instance, nil
 }
 
 func NewClient(ctx context.Context, cfg *Config) (*Client, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
-
-	// Create a new factory with the provided registry for auto-registration.
 	factory := promauto.With(cfg.MetricsRegisterer)
 
 	m := &metrics{
-		rawStateProcessed: factory.NewCounter(prometheus.CounterOpts{
-			Name: "defistate_views_processed_total",
-			Help: "The total number of state views processed.",
-		}),
-		stateUpdateDropped: factory.NewCounter(prometheus.CounterOpts{
-			Name: "defistate_update_signals_dropped_total",
-			Help: "The total number of view update signals dropped due to a busy consumer.",
-		}),
+		rawStateProcessed: factory.NewCounter(prometheus.CounterOpts{Name: "client_rawstate_processed_total"}),
 		processingDuration: factory.NewHistogramVec(prometheus.HistogramOpts{
-			Name:    "defistate_processing_duration_seconds",
-			Help:    "The duration of each stage in the view processing pipeline.",
-			Buckets: prometheus.DefBuckets,
+			Name: "client_processing_duration_seconds", Buckets: prometheus.DefBuckets,
 		}, []string{"stage"}),
 	}
 
-	state := &Client{
-		stream:   cfg.Client,
-		logger:   cfg.Logger,
-		indexers: cfg.Indexers,
-		metrics:  m,
-		stateCh:  make(chan *State, 1000),
+	client := &Client{stream: cfg.Client, logger: cfg.Logger, indexers: cfg.Indexers, metrics: m}
+	go client.loop(ctx)
+	return client, nil
+}
+
+// State provides instantaneous, thread-safe access to the most recently indexed DeFi state.
+func (p *Client) State() *State {
+	return p.latestState.Load()
+}
+
+// OnNewBlock registers a strategy function to execute immediately upon block arrival.
+func (p *Client) OnNewBlock(handler func(context.Context, *State) error) error {
+	p.handlerMutex.Lock()
+	defer p.handlerMutex.Unlock()
+
+	if p.isRegistered {
+		return errors.New("OnNewBlock handler is already registered for this client")
 	}
 
-	go state.loop(ctx)
-
-	return state, nil
+	p.onNewBlock = handler
+	p.isRegistered = true
+	return nil
 }
 
-func (p *Client) State() <-chan *State {
-	return p.stateCh
-}
-
-// loop processes new raw views, indexes them in parallel, graphs them, and signals consumers.
 func (p *Client) loop(ctx context.Context) {
-
 	for {
 		select {
 		case rawState, ok := <-p.stream.State():
 			if !ok {
-				p.logger.Error("Upstream state channel closed")
+				p.logger.Error("Upstream stream closed unexpectedly")
 				return
 			}
 
 			processed, err := p.processState(ctx, rawState)
 			if err != nil {
-				p.logger.Error("Failed to process state", "block", rawState.Block.Number, "err", err)
+				p.logger.Error("State processing failed", "block", rawState.Block.Number, "err", err)
 				continue
 			}
-			select {
-			case p.stateCh <- processed:
-				p.logger.Debug("sent new state update", "block", rawState.Block.Number)
-			default:
-				p.metrics.stateUpdateDropped.Inc()
-				p.logger.Warn("State buffer full, discarding processed state...", "block", rawState.Block.Number)
+
+			// Atomic update for Pull pattern users.
+			p.latestState.Store(processed)
+
+			// Read-locked execution for Push pattern users.
+			p.handlerMutex.RLock()
+			currentHandler := p.onNewBlock
+			p.handlerMutex.RUnlock()
+
+			if currentHandler != nil {
+				if err := currentHandler(ctx, processed); err != nil {
+					p.logger.Error("OnNewBlock callback error", "block", processed.Block.Number, "err", err)
+				}
 			}
 
 		case err := <-p.stream.Err():
-			p.logger.Error("DeFi state client encountered a fatal error", "error", err)
+			p.logger.Error("Client encountered fatal stream error", "err", err)
 			return
-
 		case <-ctx.Done():
 			return
 		}
@@ -243,55 +250,48 @@ type dataBuckets struct {
 	graph         *poolregistry.TokenPoolsRegistryView
 	uniswapv2     []uniswapv2.PoolView
 	uniswapv3     []uniswapv3.PoolView
+	pancakeswapV3 []uniswapv3.PoolView
 }
 
 func (p *Client) processState(ctx context.Context, rawState *engine.State) (*State, error) {
 	p.metrics.rawStateProcessed.Inc()
 	start := time.Now()
 
-	// 1. Extraction: Bucket the raw interface data
 	buckets, err := p.extractBuckets(rawState)
 	if err != nil {
-		return nil, fmt.Errorf("extraction failed: %w", err)
+		return nil, err
 	}
 
-	// 2. Foundation: Index the registries (Sequential as they are dependencies)
 	indexedTokenSystem := p.indexers.Token.Index(buckets.tokenregistry)
 	indexedPoolRegistry := p.indexers.PoolRegistry.Index(*buckets.poolregistry)
 
-	// 3. Protocols: Index in parallel using errgroup
 	var (
-		indexedUniswapV2 clients.IndexedUniswapV2
-		indexedUniswapV3 clients.IndexedUniswapV3
+		indexedUniswapV2     clients.IndexedUniswapV2
+		indexedUniswapV3     clients.IndexedUniswapV3
+		indexedPancakeswapV3 clients.IndexedUniswapV3
 	)
 
 	g, _ := errgroup.WithContext(ctx)
-
 	g.Go(func() error {
 		var err error
-		indexedUniswapV2, err = p.indexers.UniswapV2.Index(
-			buckets.uniswapv2,
-			indexedTokenSystem,
-			indexedPoolRegistry,
-		)
+		indexedUniswapV2, err = p.indexers.UniswapV2.Index(UniswapV2ProtocolID, buckets.uniswapv2, indexedTokenSystem, indexedPoolRegistry)
 		return err
 	})
-
 	g.Go(func() error {
 		var err error
-		indexedUniswapV3, err = p.indexers.UniswapV3.Index(
-			buckets.uniswapv3,
-			indexedTokenSystem,
-			indexedPoolRegistry,
-		)
+		indexedUniswapV3, err = p.indexers.UniswapV3.Index(UniswapV3ProtocolID, buckets.uniswapv3, indexedTokenSystem, indexedPoolRegistry)
+		return err
+	})
+	g.Go(func() error {
+		var err error
+		indexedPancakeswapV3, err = p.indexers.UniswapV3.Index(PancakeswapV3ProtocolID, buckets.pancakeswapV3, indexedTokenSystem, indexedPoolRegistry)
 		return err
 	})
 
 	if err := g.Wait(); err != nil {
-		return nil, fmt.Errorf("protocol indexing failed: %w", err)
+		return nil, fmt.Errorf("parallel indexing failed: %w", err)
 	}
 
-	// 4. Metrics & Mapping
 	indexingDuration := time.Since(start)
 	p.metrics.processingDuration.WithLabelValues("indexing").Observe(indexingDuration.Seconds())
 
@@ -300,85 +300,67 @@ func (p *Client) processState(ctx context.Context, rawState *engine.State) (*Sta
 		protocolIDToSchema[id] = proto.Schema
 	}
 
-	// 5. Final State Assembly
 	state := &State{
-		IndexedTokenSystem:  indexedTokenSystem,
-		IndexedPoolRegistry: indexedPoolRegistry,
-		IndexedUniswapV2:    indexedUniswapV2,
-		IndexedUniswapV3:    indexedUniswapV3,
-		ProtocolResolver:    clients.NewProtocolResolver(protocolIDToSchema, indexedPoolRegistry),
-		Graph:               buckets.graph,
-		Block:               rawState.Block,
-		Timestamp:           uint64(time.Now().UnixNano()),
+		Tokens:           indexedTokenSystem,
+		Pools:            indexedPoolRegistry,
+		UniswapV2:        indexedUniswapV2,
+		UniswapV3:        indexedUniswapV3,
+		PancakeswapV3:    indexedPancakeswapV3,
+		ProtocolResolver: clients.NewProtocolResolver(protocolIDToSchema, indexedPoolRegistry),
+		Graph:            buckets.graph,
+		Block:            rawState.Block,
+		Timestamp:        uint64(time.Now().UnixNano()),
 	}
 
 	p.metrics.processingDuration.WithLabelValues("total").Observe(time.Since(start).Seconds())
-	p.logger.Info("state processed", "block", rawState.Block.Number, "duration_ms", time.Since(start).Milliseconds())
-
 	return state, nil
 }
 
 func (p *Client) extractBuckets(rawState *engine.State) (*dataBuckets, error) {
-	b := &dataBuckets{}
-
-	for _, proto := range rawState.Protocols {
-		switch proto.Schema {
+	buckets := &dataBuckets{}
+	for protocolID, protocol := range rawState.Protocols {
+		switch protocol.Schema {
 		case tokenregistry.TokenProtocolSchema:
-			b.tokenregistry = proto.Data.([]tokenregistry.TokenView)
+			buckets.tokenregistry = protocol.Data.([]tokenregistry.TokenView)
 		case poolregistry.PoolProtocolSchema:
-			d := proto.Data.(poolregistry.PoolRegistryView)
-			b.poolregistry = &d
+			view := protocol.Data.(poolregistry.PoolRegistryView)
+			buckets.poolregistry = &view
 		case poolregistry.TokenPoolProtocolSchema:
-			b.graph = proto.Data.(*poolregistry.TokenPoolsRegistryView)
+			buckets.graph = protocol.Data.(*poolregistry.TokenPoolsRegistryView)
 		case uniswapv2.UniswapV2ProtocolSchema:
-			b.uniswapv2 = append(b.uniswapv2, proto.Data.([]uniswapv2.PoolView)...)
+			if protocolID == UniswapV2ProtocolID {
+				buckets.uniswapv2 = protocol.Data.([]uniswapv2.PoolView)
+			}
 		case uniswapv3.UniswapV3ProtocolSchema:
-			b.uniswapv3 = append(b.uniswapv3, proto.Data.([]uniswapv3.PoolView)...)
+			switch protocolID {
+			case UniswapV3ProtocolID:
+				buckets.uniswapv3 = protocol.Data.([]uniswapv3.PoolView)
+			case PancakeswapV3ProtocolID:
+				buckets.pancakeswapV3 = protocol.Data.([]uniswapv3.PoolView)
+			}
 		}
 	}
-
-	if b.tokenregistry == nil || b.poolregistry == nil || b.graph == nil {
-		return nil, fmt.Errorf("missing foundation data in block %d", rawState.Block.Number)
+	if buckets.tokenregistry == nil || buckets.poolregistry == nil || buckets.graph == nil {
+		return nil, fmt.Errorf("incomplete foundation data in block %d", rawState.Block.Number)
 	}
-
-	return b, nil
+	return buckets, nil
 }
 
-// Option configures the Client.
-// The interface method is unexported to prevent external modification after Dial.
-type Option interface {
-	apply(*Client)
-}
-
+// Option allows for fine-grained configuration during client creation.
+type Option interface{ apply(*Client) }
 type funcOption func(*Client)
 
-func (f funcOption) apply(p *Client) {
-	f(p)
-}
+func (f funcOption) apply(p *Client) { f(p) }
 
-func newOption(f func(*Client)) Option {
-	return funcOption(f)
+func WithTokenIndexer(i clients.TokenIndexer) Option {
+	return funcOption(func(p *Client) { p.indexers.Token = i })
 }
-func WithTokenIndexer(indexer clients.TokenIndexer) Option {
-	return newOption(func(p *Client) {
-		p.indexers.Token = indexer
-	})
+func WithPoolRegistryIndexer(i clients.PoolRegistryIndexer) Option {
+	return funcOption(func(p *Client) { p.indexers.PoolRegistry = i })
 }
-
-func WithPoolRegistryIndexer(indexer clients.PoolRegistryIndexer) Option {
-	return newOption(func(p *Client) {
-		p.indexers.PoolRegistry = indexer
-	})
+func WithUniswapV2Indexer(i clients.UniswapV2Indexer) Option {
+	return funcOption(func(p *Client) { p.indexers.UniswapV2 = i })
 }
-
-func WithUniswapV2Indexer(indexer clients.UniswapV2Indexer) Option {
-	return newOption(func(p *Client) {
-		p.indexers.UniswapV2 = indexer
-	})
-}
-
-func WithUniswapV3Indexer(indexer clients.UniswapV3Indexer) Option {
-	return newOption(func(p *Client) {
-		p.indexers.UniswapV3 = indexer
-	})
+func WithUniswapV3Indexer(i clients.UniswapV3Indexer) Option {
+	return funcOption(func(p *Client) { p.indexers.UniswapV3 = i })
 }

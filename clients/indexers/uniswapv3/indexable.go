@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	clients "github.com/defistate/defistate/clients"
+	"github.com/defistate/defistate/engine"
 	uniswapv3 "github.com/defistate/defistate/protocols/uniswap-v3"
 	"github.com/ethereum/go-ethereum/common"
 )
@@ -18,11 +19,12 @@ func New() *Indexer {
 
 // Index creates an indexed Uniswap V3 system from a raw slice of pool views.
 func (i *Indexer) Index(
+	protocolID engine.ProtocolID,
 	pools []uniswapv3.PoolView,
 	tokenRegistry clients.IndexedTokenSystem,
 	poolRegistry clients.IndexedPoolRegistry,
 ) (clients.IndexedUniswapV3, error) {
-	return NewIndexableUniswapV3System(pools, tokenRegistry, poolRegistry)
+	return NewIndexableUniswapV3System(protocolID, pools, tokenRegistry, poolRegistry)
 }
 
 // IndexableUniswapV3System provides fast, indexed access to Uniswap V3 pool data.
@@ -43,6 +45,7 @@ type IndexableUniswapV3System struct {
 
 // NewIndexableUniswapV3System creates a new indexed Uniswap V3 system.
 func NewIndexableUniswapV3System(
+	protocolID engine.ProtocolID,
 	sourcePools []uniswapv3.PoolView,
 	tokenRegistry clients.IndexedTokenSystem,
 	poolRegistry clients.IndexedPoolRegistry,
@@ -56,8 +59,6 @@ func NewIndexableUniswapV3System(
 	// 2. Pre-allocate maps to avoid resizing and rehashing during the loop.
 	byAddress := make(map[common.Address]int, count)
 	byID := make(map[uint64]int, count)
-
-	protocols := poolRegistry.GetProtocols()
 
 	for i, p := range sourcePools {
 		// --- Registry Lookups ---
@@ -83,10 +84,6 @@ func NewIndexableUniswapV3System(
 			return nil, fmt.Errorf("token1 with ID %d not found in indexed token registry", p.Token1)
 		}
 
-		protocolID, ok := protocols[pr.Protocol]
-		if !ok {
-			return nil, fmt.Errorf("unable to resolve protocol ")
-		}
 		// --- Construction ---
 		// Write directly into the pre-allocated storage slice at index 'i'.
 		storage[i] = uniswapv3.Pool{

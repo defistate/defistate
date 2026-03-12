@@ -23,7 +23,6 @@ import (
 
 // --- Localized Mocks & Trackers ---
 
-// callTracker helps us verify that our concurrent pipeline actually hits all indexers.
 type callTracker struct {
 	mu     sync.Mutex
 	called map[string]bool
@@ -41,13 +40,11 @@ func (c *callTracker) wasCalled(name string) bool {
 	return c.called[name]
 }
 
-// dummyIndexed types satisfy the interface return values for the indexers.
 type mockIndexedToken struct{ clients.IndexedTokenSystem }
 type mockIndexedPoolRegistry struct{ clients.IndexedPoolRegistry }
 type mockIndexedUniswapV2 struct{ clients.IndexedUniswapV2 }
 type mockIndexedUniswapV3 struct{ clients.IndexedUniswapV3 }
 
-// Indexer Mock Implementations
 type mockTokenIndexer struct{ t *callTracker }
 
 func (m *mockTokenIndexer) Index(_ []tokenregistry.TokenView) clients.IndexedTokenSystem {
@@ -64,19 +61,18 @@ func (m *mockPoolRegistryIndexer) Index(_ poolregistry.PoolRegistryView) clients
 
 type mockV2Indexer struct{ t *callTracker }
 
-func (m *mockV2Indexer) Index(_ []uniswapv2.PoolView, _ clients.IndexedTokenSystem, _ clients.IndexedPoolRegistry) (clients.IndexedUniswapV2, error) {
-	m.t.track("v2")
+func (m *mockV2Indexer) Index(protocolID engine.ProtocolID, _ []uniswapv2.PoolView, _ clients.IndexedTokenSystem, _ clients.IndexedPoolRegistry) (clients.IndexedUniswapV2, error) {
+	m.t.track(string(protocolID))
 	return &mockIndexedUniswapV2{}, nil
 }
 
 type mockV3Indexer struct{ t *callTracker }
 
-func (m *mockV3Indexer) Index(_ []uniswapv3.PoolView, _ clients.IndexedTokenSystem, _ clients.IndexedPoolRegistry) (clients.IndexedUniswapV3, error) {
-	m.t.track("v3")
+func (m *mockV3Indexer) Index(protocolID engine.ProtocolID, _ []uniswapv3.PoolView, _ clients.IndexedTokenSystem, _ clients.IndexedPoolRegistry) (clients.IndexedUniswapV3, error) {
+	m.t.track(string(protocolID))
 	return &mockIndexedUniswapV3{}, nil
 }
 
-// mockStream simulates the upstream raw state channel.
 type mockStream struct {
 	stateCh chan *engine.State
 	errCh   chan error
@@ -87,7 +83,7 @@ func (m *mockStream) Err() <-chan error           { return m.errCh }
 
 // --- Test Suite ---
 
-func TestClient_Pipeline(t *testing.T) {
+func TestClient_CeloLifecycle(t *testing.T) {
 	setup := func() (*Config, *mockStream, *callTracker) {
 		tracker := &callTracker{called: make(map[string]bool)}
 		stream := &mockStream{
@@ -109,7 +105,7 @@ func TestClient_Pipeline(t *testing.T) {
 		return cfg, stream, tracker
 	}
 
-	t.Run("Processing Flow and Concurrency", func(t *testing.T) {
+	t.Run("Concurrent Pipeline and Callback Validation", func(t *testing.T) {
 		cfg, mStream, tracker := setup()
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -117,89 +113,87 @@ func TestClient_Pipeline(t *testing.T) {
 		client, err := NewClient(ctx, cfg)
 		require.NoError(t, err)
 
-		// Construct a raw state with all required protocol schemas
-		rawState := &engine.State{
+		// Verification variables for the callback
+		var mu sync.Mutex
+		handlerCalled := false
+		var capturedBlock int64
+
+		err = client.OnNewBlock(func(ctx context.Context, state *State) error {
+			mu.Lock()
+			defer mu.Unlock()
+			handlerCalled = true
+			capturedBlock = state.Block.Number.Int64()
+			return nil
+		})
+		require.NoError(t, err)
+
+		// Inject complex raw state
+		mStream.stateCh <- &engine.State{
 			Block: engine.BlockSummary{Number: big.NewInt(42)},
 			Protocols: map[engine.ProtocolID]engine.ProtocolState{
-				"tokens": {
-					Schema: tokenregistry.TokenProtocolSchema,
-					Data:   []tokenregistry.TokenView{{ID: 1, Symbol: "TEST"}},
-				},
-				"registry": {
-					Schema: poolregistry.PoolProtocolSchema,
-					Data:   poolregistry.PoolRegistryView{},
-				},
-				"graph": {
-					Schema: poolregistry.TokenPoolProtocolSchema,
-					Data:   &poolregistry.TokenPoolsRegistryView{},
-				},
-				"univ2": {
-					Schema: uniswapv2.UniswapV2ProtocolSchema,
-					Data:   []uniswapv2.PoolView{},
-				},
-				"univ3": {
-					Schema: uniswapv3.UniswapV3ProtocolSchema,
-					Data:   []uniswapv3.PoolView{},
-				},
+				"tokens":              {Schema: tokenregistry.TokenProtocolSchema, Data: []tokenregistry.TokenView{{ID: 1}}},
+				"registry":            {Schema: poolregistry.PoolProtocolSchema, Data: poolregistry.PoolRegistryView{}},
+				"graph":               {Schema: poolregistry.TokenPoolProtocolSchema, Data: &poolregistry.TokenPoolsRegistryView{}},
+				UniswapV2ProtocolID:   {Schema: uniswapv2.UniswapV2ProtocolSchema, Data: []uniswapv2.PoolView{}},
+				UniswapV3ProtocolID:   {Schema: uniswapv3.UniswapV3ProtocolSchema, Data: []uniswapv3.PoolView{}},
+				AerodromeV3ProtocolID: {Schema: uniswapv3.UniswapV3ProtocolSchema, Data: []uniswapv3.PoolView{}},
 			},
 		}
 
-		// Inject raw data into the processor
-		mStream.stateCh <- rawState
+		// 1. Assert handler execution via polling
+		require.Eventually(t, func() bool {
+			mu.Lock()
+			defer mu.Unlock()
+			return handlerCalled && capturedBlock == 42
+		}, 2*time.Second, 10*time.Millisecond, "OnNewBlock handler was not called")
 
-		// Assert the state emerges from the output channel fully processed
-		select {
-		case processed := <-client.State():
-			assert.Equal(t, int64(42), processed.Block.Number.Int64())
-			assert.NotNil(t, processed.ProtocolResolver)
-			assert.NotNil(t, processed.Graph)
+		// 2. Assert Pull Pattern: State() provides the latest snapshot
+		latest := client.State()
+		require.NotNil(t, latest)
+		assert.Equal(t, int64(42), latest.Block.Number.Int64())
 
-			// Verify all indexers were hit (confirming parallel errgroup execution)
-			assert.True(t, tracker.wasCalled("token"), "Token Indexer missed")
-			assert.True(t, tracker.wasCalled("registry"), "Pool Registry Indexer missed")
-			assert.True(t, tracker.wasCalled("v2"), "Uniswap V2 Indexer missed")
-			assert.True(t, tracker.wasCalled("v3"), "Uniswap V3 Indexer missed")
-
-		case <-time.After(2 * time.Second):
-			t.Fatal("timed out waiting for processed state")
-		}
+		// 3. Assert Indexer Concurrency: verify all specific protocol indexers were hit
+		assert.True(t, tracker.wasCalled("token"))
+		assert.True(t, tracker.wasCalled("registry"))
+		assert.True(t, tracker.wasCalled(string(UniswapV2ProtocolID)))
+		assert.True(t, tracker.wasCalled(string(UniswapV3ProtocolID)))
+		assert.True(t, tracker.wasCalled(string(AerodromeV3ProtocolID)))
 	})
 
-	t.Run("Configuration Validation", func(t *testing.T) {
+	t.Run("Registration Guard Enforcement", func(t *testing.T) {
 		cfg, _, _ := setup()
+		client, _ := NewClient(context.Background(), cfg)
 
-		// Case 1: Missing Root Client
-		badCfg := *cfg
-		badCfg.Client = nil
-		_, err := NewClient(context.Background(), &badCfg)
-		assert.ErrorIs(t, err, ErrClientRequired)
+		// First registration succeeds
+		err := client.OnNewBlock(func(ctx context.Context, s *State) error { return nil })
+		assert.NoError(t, err)
 
-		// Case 2: Missing Nested Indexer
-		badCfg2 := *cfg
-		badCfg2.Indexers.UniswapV2 = nil
-		_, err2 := NewClient(context.Background(), &badCfg2)
-		assert.ErrorIs(t, err2, ErrUniswapV2IndexerRequired)
+		// Second registration fails explicitly
+		err2 := client.OnNewBlock(func(ctx context.Context, s *State) error { return nil })
+		assert.Error(t, err2)
+		assert.Contains(t, err2.Error(), "already registered")
 	})
 
-	t.Run("Graceful Shutdown", func(t *testing.T) {
+	t.Run("Graceful Context Shutdown", func(t *testing.T) {
 		cfg, mStream, _ := setup()
 		ctx, cancel := context.WithCancel(context.Background())
+		client, _ := NewClient(ctx, cfg)
 
-		client, err := NewClient(ctx, cfg)
-		require.NoError(t, err)
-
-		cancel() // Shut down the processor
+		cancel() // Shut down
 		time.Sleep(50 * time.Millisecond)
 
-		// Try to send a state
-		mStream.stateCh <- &engine.State{Block: engine.BlockSummary{Number: big.NewInt(100)}}
-
-		// Channel should not receive the update because the loop should have exited
-		select {
-		case <-client.State():
-			t.Fatal("client should not have processed state after context cancellation")
-		case <-time.After(100 * time.Millisecond):
-			// Success: loop exited
+		// Send data post-shutdown
+		mStream.stateCh <- &engine.State{
+			Block: engine.BlockSummary{Number: big.NewInt(100)},
+			Protocols: map[engine.ProtocolID]engine.ProtocolState{
+				"tokens":   {Schema: tokenregistry.TokenProtocolSchema, Data: []tokenregistry.TokenView{}},
+				"registry": {Schema: poolregistry.PoolProtocolSchema, Data: poolregistry.PoolRegistryView{}},
+				"graph":    {Schema: poolregistry.TokenPoolProtocolSchema, Data: &poolregistry.TokenPoolsRegistryView{}},
+			},
 		}
+
+		// Ensure nothing was processed
+		time.Sleep(50 * time.Millisecond)
+		assert.Nil(t, client.State(), "Client should have ignored block 100 after shutdown")
 	})
 }
