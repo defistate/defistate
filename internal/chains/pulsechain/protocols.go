@@ -1,4 +1,4 @@
-package ethereum
+package pulsechain
 
 import (
 	"context"
@@ -118,16 +118,6 @@ func MakePulsechainProtocols(
 			},
 			KnownFactories: []uniswapv2poolinitializer.KnownFactory{
 				{
-					Address:      common.HexToAddress("0x1715a3e4a142d8b698131108995174f37aeba10d"),
-					FeeBps:       30,
-					ProtocolName: string(uniswapV2ProtocolID),
-				},
-				{
-					Address:      common.HexToAddress("0x29eA7545DEf87022BAdc76323F373EA1e707C523"),
-					FeeBps:       30,
-					ProtocolName: string(uniswapV2ProtocolID),
-				},
-				{
 					Address:      common.HexToAddress("0x5b9F077A77db37F3Be0A5b5d31BAeff4bc5C0bD7"),
 					FeeBps:       30,
 					ProtocolName: string(uniswapV2ProtocolID),
@@ -190,7 +180,58 @@ func MakePulsechainProtocols(
 	}
 
 	// ---------------------------------------------------------
-	// 3. Uniswap V3 (Mainnet)
+	// 2.  Pulsex (Mainnet)
+	// ---------------------------------------------------------
+	pulsexV2ProtocolID := engine.ProtocolID("pulsex-v2-pulsechain-mainnet")
+	pulsexV2ProtocolPoolRegistrar := func(tokens []common.Address, pool common.Address) (poolID uint64, err error) {
+		poolID, _, err = deps.Registry.RegisterPool(
+			poolregistry.AddressToPoolKey(pool),
+			tokens,
+			pulsexV2ProtocolID,
+		)
+		return poolID, err
+	}
+	pulsexV2Protocol, pulsexV2ProtocolPlugins, err := uniswapv2protocol.MakeProtocol(
+		ctx,
+		&uniswapv2protocol.UniswapV2SystemSetupConfig{
+			SystemCfg: uniswapv2protocol.UniswapV2SystemConfig{
+				SystemName:      string(pulsexV2ProtocolID),
+				PruneFrequency:  DefaultPruneFrequency,
+				InitFrequency:   DefaultInitFrequency,
+				ResyncFrequency: DefaultResyncFrequency,
+				LogMaxRetries:   DefaultLogMaxRetries,
+				LogRetryDelay:   DefaultLogRetryDelay,
+			},
+			KnownFactories: []uniswapv2poolinitializer.KnownFactory{
+				{
+					Address:      common.HexToAddress("0x1715a3e4a142d8b698131108995174f37aeba10d"), // pulsex
+					FeeBps:       30,
+					ProtocolName: string(pulsexV2ProtocolID),
+				},
+				{
+					Address:      common.HexToAddress("0x29eA7545DEf87022BAdc76323F373EA1e707C523"), // pulsex
+					FeeBps:       30,
+					ProtocolName: string(pulsexV2ProtocolID),
+				},
+			},
+			BlockSubscriberGenerator: deps.BlockSubscriberGenerator,
+			GetClient:                deps.GetClient,
+			PrometheusRegistry:       deps.PrometheusRegistry,
+			TokenAddressToID:         tokenAddressToID,
+			PoolAddressToID:          poolAddressToID,
+			PoolIDToAddress:          poolIDToAddress,
+			Registrar:                pulsexV2ProtocolPoolRegistrar,
+			OnDeletePools:            onDeletePools,
+			Logger:                   deps.RootLogger.With("component", string(pulsexV2ProtocolID)),
+			ErrorHandler:             deps.ErrorHandler,
+		},
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// ---------------------------------------------------------
+	// 4. Uniswap V3 (Mainnet)
 	// ---------------------------------------------------------
 	uniswapV3ProtocolID := engine.ProtocolID("uniswap-v3-pulsechain-mainnet")
 	uniswapV3ProtocolPoolRegistrar := func(tokens []common.Address, pool common.Address) (poolID uint64, err error) {
@@ -240,7 +281,7 @@ func MakePulsechainProtocols(
 	}
 
 	// ---------------------------------------------------------
-	// 4. PancakeSwap V3 (Mainnet)
+	// 5. PancakeSwap V3 (Mainnet)
 	// ---------------------------------------------------------
 	pancakeSwapV3ProtocolID := engine.ProtocolID("pancakeswap-v3-pulsechain-mainnet")
 	pancakeSwapV3ProtocolPoolRegistrar := func(tokens []common.Address, pool common.Address) (poolID uint64, err error) {
@@ -299,6 +340,11 @@ func MakePulsechainProtocols(
 	if err != nil {
 		return nil, nil, err
 	}
+	err = deps.RegisterProtocolPlugins(pulsexV2ProtocolID, pulsexV2ProtocolPlugins)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	err = deps.RegisterProtocolPlugins(uniswapV3ProtocolID, uniswapV3ProtocolPlugins)
 	if err != nil {
 		return nil, nil, err
@@ -309,6 +355,7 @@ func MakePulsechainProtocols(
 	}
 	// register block synchronized protocols
 	blockSynchronizedProtocols[uniswapV2ProtocolID] = uniswapV2Protocol
+	blockSynchronizedProtocols[pulsexV2ProtocolID] = pulsexV2Protocol
 	blockSynchronizedProtocols[uniswapV3ProtocolID] = uniswapV3Protocol
 	blockSynchronizedProtocols[pancakeSwapV3ProtocolID] = pancakeSwapV3Protocol
 

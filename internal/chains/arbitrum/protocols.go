@@ -1,4 +1,4 @@
-package ethereum
+package arbitrum
 
 import (
 	"context"
@@ -96,7 +96,7 @@ func MakeArbitrumProtocols(
 	// ---------------------------------------------------------
 	// 2. Uniswap V2 (Mainnet)
 	// ---------------------------------------------------------
-	uniswapV2ProtocolID := engine.ProtocolID("uniswap-v2-ethereum-mainnet")
+	uniswapV2ProtocolID := engine.ProtocolID("uniswap-v2-arbitrum-mainnet")
 	uniswapV2ProtocolPoolRegistrar := func(tokens []common.Address, pool common.Address) (poolID uint64, err error) {
 		poolID, _, err = deps.Registry.RegisterPool(
 			poolregistry.AddressToPoolKey(pool),
@@ -142,7 +142,7 @@ func MakeArbitrumProtocols(
 	// ---------------------------------------------------------
 	// 3. Uniswap V3 (Mainnet)
 	// ---------------------------------------------------------
-	uniswapV3ProtocolID := engine.ProtocolID("uniswap-v3-ethereum-mainnet")
+	uniswapV3ProtocolID := engine.ProtocolID("uniswap-v3-arbitrum-mainnet")
 	uniswapV3ProtocolPoolRegistrar := func(tokens []common.Address, pool common.Address) (poolID uint64, err error) {
 		poolID, _, err = deps.Registry.RegisterPool(
 			poolregistry.AddressToPoolKey(pool),
@@ -165,7 +165,7 @@ func MakeArbitrumProtocols(
 				KnownFactories:  []common.Address{common.HexToAddress("0x1F98431c8aD98523631AE4a59f267346ea31F984")},
 			},
 			TickIndexerConfig: uniswapv3protocol.UniswapV3TickIndexerConfig{
-				SystemName:      "uniswap-v3-tick-indexer-ethereum-mainnet",
+				SystemName:      "uniswap-v3-tick-indexer-arbitrum-mainnet",
 				InitFrequency:   DefaultInitFrequency,
 				ResyncFrequency: DefaultResyncFrequency,
 				UpdateFrequency: DefaultTickIndexerUpdateFrequency,
@@ -191,7 +191,7 @@ func MakeArbitrumProtocols(
 	// ---------------------------------------------------------
 	// 4. PancakeSwap V3 (Mainnet)
 	// ---------------------------------------------------------
-	pancakeSwapV3ProtocolID := engine.ProtocolID("pancakeswap-v3-ethereum-mainnet")
+	pancakeSwapV3ProtocolID := engine.ProtocolID("pancakeswap-v3-arbitrum-mainnet")
 	pancakeSwapV3ProtocolPoolRegistrar := func(tokens []common.Address, pool common.Address) (poolID uint64, err error) {
 		poolID, _, err = deps.Registry.RegisterPool(
 			poolregistry.AddressToPoolKey(pool),
@@ -214,7 +214,7 @@ func MakeArbitrumProtocols(
 				KnownFactories:  []common.Address{common.HexToAddress("0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865")},
 			},
 			TickIndexerConfig: uniswapv3protocol.UniswapV3TickIndexerConfig{
-				SystemName:      "pancakeswap-v3-tick-indexer-ethereum-mainnet",
+				SystemName:      "pancakeswap-v3-tick-indexer-arbitrum-mainnet",
 				InitFrequency:   DefaultInitFrequency,
 				ResyncFrequency: DefaultResyncFrequency,
 				UpdateFrequency: DefaultTickIndexerUpdateFrequency,
