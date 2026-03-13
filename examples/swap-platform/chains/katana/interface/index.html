@@ -52,6 +52,7 @@
       font-weight: 600;
       color: rgb(15 23 42);
       outline: none;
+      min-width: 0;
       transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
     }
 
@@ -61,10 +62,10 @@
       box-shadow: 0 0 0 4px rgba(96,165,250,0.14);
     }
 
-    .amount-input:disabled {
+    .amount-input:disabled,
+    .amount-input[readonly] {
       background: rgb(248 250 252);
       color: rgb(100 116 139);
-      cursor: not-allowed;
     }
 
     .swap-panel {
@@ -82,72 +83,80 @@
       background: linear-gradient(135deg, rgba(59,130,246,0.08), transparent 28%, transparent 72%, rgba(99,102,241,0.06));
       opacity: 0.9;
     }
+
+    @media (max-width: 420px) {
+      .token-select,
+      .amount-input {
+        padding: 0.85rem 0.9rem;
+        font-size: 0.9rem;
+      }
+    }
   </style>
 </head>
 <body class="bg-slate-50 text-slate-900 antialiased">
   <div class="relative overflow-hidden hero-pattern min-h-screen">
-    <div class="absolute inset-x-0 top-0 h-[220px] md:h-[520px] bg-gradient-to-b from-slate-50 via-slate-50 to-transparent md:from-blue-50/80 md:via-indigo-50/40 pointer-events-none"></div>
+    <div class="absolute inset-x-0 top-0 h-[180px] sm:h-[220px] md:h-[520px] bg-gradient-to-b from-slate-50 via-slate-50 to-transparent md:from-blue-50/80 md:via-indigo-50/40 pointer-events-none"></div>
     <div class="hidden md:block absolute top-0 left-1/2 -translate-x-1/2 -mt-40 w-[820px] h-[820px] bg-blue-200/45 rounded-full blur-3xl pointer-events-none"></div>
     <div class="hidden md:block absolute right-0 top-20 w-72 h-72 bg-indigo-200/30 rounded-full blur-3xl pointer-events-none"></div>
 
-    <div class="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 pb-16 md:pt-16 md:pb-24">
-      <header class="flex items-center justify-between gap-6 mb-12 md:mb-16">
-        <div class="flex items-center gap-3">
-          <img src="/defistate_hex_logo.svg" onerror="this.style.display='none'" alt="DeFiState" class="h-12 w-auto drop-shadow-sm">
-          <span class="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-950">DeFiState</span>
+    <div class="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 md:pt-16 pb-12 sm:pb-16 md:pb-24">
+      <header class="flex items-center justify-between gap-4 sm:gap-6 mb-8 sm:mb-10 md:mb-16">
+        <div class="flex items-center gap-2 sm:gap-3 min-w-0">
+          <img src="/defistate_hex_logo.svg" onerror="this.style.display='none'" alt="DeFiState" class="h-10 sm:h-11 md:h-12 w-auto drop-shadow-sm shrink-0">
+          <span class="text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight text-slate-950 truncate">DeFiState</span>
         </div>
 
         <button
           id="connectWalletButton"
           type="button"
-          class="inline-flex items-center justify-center px-5 py-3 rounded-xl bg-slate-950 text-white text-sm font-semibold hover:bg-slate-800 transition-colors shadow-lg shadow-slate-900/10"
+          class="inline-flex items-center justify-center px-3.5 sm:px-5 py-2.5 sm:py-3 rounded-xl bg-slate-950 text-white text-xs sm:text-sm font-semibold hover:bg-slate-800 transition-colors shadow-lg shadow-slate-900/10 shrink-0"
         >
           Connect Wallet
         </button>
       </header>
 
-      <div class="grid lg:grid-cols-[1.05fr_0.95fr] gap-8 lg:gap-12 items-center">
-        <section>
-          <div class="text-xs font-bold uppercase section-kicker text-blue-700 mb-4">Katana</div>
+      <div class="grid grid-cols-1 lg:grid-cols-[1.05fr_0.95fr] gap-8 md:gap-10 lg:gap-12 items-start lg:items-center">
+        <section class="order-1">
+          <div class="text-[11px] sm:text-xs font-bold uppercase section-kicker text-blue-700 mb-3 sm:mb-4">Katana</div>
 
-          <h1 class="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold tracking-tight leading-[0.95] text-slate-950">
+          <h1 class="text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-extrabold tracking-tight leading-[0.98] text-slate-950 max-w-4xl">
             Build Swap Platforms with <span class="text-slate-950">DeFiState</span>.
           </h1>
 
-          <p class="mt-6 max-w-2xl text-base sm:text-lg md:text-xl leading-relaxed text-slate-600">
+          <p class="mt-4 sm:mt-5 md:mt-6 max-w-2xl text-sm sm:text-base md:text-lg lg:text-xl leading-relaxed text-slate-600">
             An example swap interface powered by DeFiState, built to quote and execute swaps.
           </p>
 
-          <div class="mt-8 flex flex-col sm:flex-row gap-3 sm:gap-4">
-            <a href="/docs/" class="inline-flex items-center justify-center px-6 sm:px-7 py-3.5 rounded-xl bg-slate-950 text-white text-base font-semibold hover:bg-slate-800 transition-all shadow-lg shadow-slate-900/10">
+          <div class="mt-6 sm:mt-8 flex flex-col sm:flex-row gap-3 sm:gap-4">
+            <a href="https://defistate.io/docs" class="inline-flex items-center justify-center px-5 sm:px-6 md:px-7 py-3.5 rounded-xl bg-slate-950 text-white text-sm sm:text-base font-semibold hover:bg-slate-800 transition-all shadow-lg shadow-slate-900/10">
               View Documentation
             </a>
           </div>
         </section>
 
-        <section class="glass-card rounded-[2rem] p-4 md:p-5 border border-white/70 soft-ring">
-          <div class="swap-panel rounded-[1.75rem] border border-white/70 overflow-hidden">
-            <div class="relative z-10 p-6 md:p-7">
-              <div class="flex items-start justify-between gap-4 mb-6">
-                <div>
-                  <div class="text-xs font-bold uppercase section-kicker text-slate-500">Katana</div>
-                  <h2 class="mt-2 text-2xl md:text-3xl font-extrabold tracking-tight text-slate-950">Swap</h2>
+        <section class="order-2 glass-card rounded-[1.5rem] sm:rounded-[2rem] p-3 sm:p-4 md:p-5 border border-white/70 soft-ring">
+          <div class="swap-panel rounded-[1.35rem] sm:rounded-[1.75rem] border border-white/70 overflow-hidden">
+            <div class="relative z-10 p-4 sm:p-5 md:p-6 lg:p-7">
+              <div class="flex items-start justify-between gap-3 sm:gap-4 mb-5 sm:mb-6">
+                <div class="min-w-0">
+                  <div class="text-[11px] sm:text-xs font-bold uppercase section-kicker text-slate-500">Katana</div>
+                  <h2 class="mt-2 text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight text-slate-950">Swap</h2>
                 </div>
 
-                <div class="inline-flex items-center gap-2 rounded-full bg-blue-50 text-blue-700 border border-blue-200 px-3 py-1.5 text-xs font-bold uppercase tracking-wide">
+                <div class="inline-flex items-center gap-2 rounded-full bg-blue-50 text-blue-700 border border-blue-200 px-2.5 sm:px-3 py-1.5 text-[10px] sm:text-xs font-bold uppercase tracking-wide shrink-0">
                   <span class="w-2 h-2 rounded-full bg-blue-500"></span>
                   Live
                 </div>
               </div>
 
-              <div class="space-y-4">
-                <div class="rounded-2xl border border-slate-200 bg-white p-4 md:p-5">
-                  <div class="flex items-center justify-between mb-3">
+              <div class="space-y-3 sm:space-y-4">
+                <div class="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+                  <div class="flex items-center justify-between gap-3 mb-3">
                     <label for="tokenIn" class="text-sm font-semibold text-slate-700">From</label>
-                    <span id="balanceIn" class="text-xs font-medium text-slate-400">Balance: -</span>
-                </div>
+                    <span id="balanceIn" class="text-[11px] sm:text-xs font-medium text-slate-400 text-right truncate">Balance: -</span>
+                  </div>
 
-                  <div class="grid grid-cols-[1fr_1.1fr] gap-3">
+                  <div class="grid grid-cols-1 sm:grid-cols-[1fr_1.1fr] gap-3">
                     <select id="tokenIn" class="token-select"></select>
                     <input id="amountIn" class="amount-input" type="number" min="0" step="any" placeholder="0.0" />
                   </div>
@@ -157,7 +166,7 @@
                   <button
                     id="flipButton"
                     type="button"
-                    class="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-950 transition shadow-sm"
+                    class="inline-flex items-center justify-center w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-950 transition shadow-sm"
                     aria-label="Flip tokens"
                     title="Flip tokens"
                   >
@@ -165,34 +174,34 @@
                   </button>
                 </div>
 
-                <div class="rounded-2xl border border-slate-200 bg-white p-4 md:p-5">
-                  <div class="flex items-center justify-between mb-3">
+                <div class="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+                  <div class="flex items-center justify-between gap-3 mb-3">
                     <label for="tokenOut" class="text-sm font-semibold text-slate-700">To</label>
-                    <span id="balanceOut" class="text-xs font-medium text-slate-400">Balance: -</span>
-                </div>
+                    <span id="balanceOut" class="text-[11px] sm:text-xs font-medium text-slate-400 text-right truncate">Balance: -</span>
+                  </div>
 
-                  <div class="grid grid-cols-[1fr_1.1fr] gap-3">
+                  <div class="grid grid-cols-1 sm:grid-cols-[1fr_1.1fr] gap-3">
                     <select id="tokenOut" class="token-select"></select>
                     <input id="amountOut" class="amount-input" type="text" placeholder="Quote" readonly />
                   </div>
                 </div>
               </div>
 
-              <div class="mt-5 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <div class="mt-4 sm:mt-5 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                 <div class="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500 mb-1">Status</div>
-                <div id="status" class="text-sm font-semibold text-slate-900">Loading tokens...</div>
+                <div id="status" class="text-sm font-semibold text-slate-900 break-words">Loading tokens...</div>
               </div>
 
               <button
                 id="swapButton"
                 type="button"
-                class="mt-5 w-full inline-flex items-center justify-center px-6 py-4 rounded-2xl bg-slate-950 text-white font-bold text-base hover:bg-slate-800 transition-all shadow-lg shadow-slate-900/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                class="mt-4 sm:mt-5 w-full inline-flex items-center justify-center px-6 py-3.5 sm:py-4 rounded-2xl bg-slate-950 text-white font-bold text-sm sm:text-base hover:bg-slate-800 transition-all shadow-lg shadow-slate-900/10 disabled:opacity-50 disabled:cursor-not-allowed"
                 disabled
               >
                 Swap
               </button>
 
-              <p class="mt-4 text-xs text-slate-500 leading-relaxed">
+              <p class="mt-3 sm:mt-4 text-[11px] sm:text-xs text-slate-500 leading-relaxed">
                 Connect a wallet, request a quote, and submit the transaction.
               </p>
             </div>
@@ -200,7 +209,7 @@
         </section>
       </div>
 
-      <footer class="mt-16 border-t border-slate-200 pt-8 text-center text-sm text-slate-500">
+      <footer class="mt-12 sm:mt-16 border-t border-slate-200 pt-6 sm:pt-8 text-center text-xs sm:text-sm text-slate-500">
         <span id="current-year"></span> DeFiState Inc.
       </footer>
     </div>
