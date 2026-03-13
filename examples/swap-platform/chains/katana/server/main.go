@@ -1,0 +1,222 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"log/slog"
+	"math/big"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/defistate/defistate/clients/chains/katana"
+	"github.com/defistate/defistate/examples/swap-platform/chains/katana/server/app"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/joho/godotenv"
+	"github.com/prometheus/client_golang/prometheus"
+)
+
+func main() {
+	// 1. Setup Signal Context
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+
+	// 2. Load .env file
+	if err := godotenv.Load(); err != nil {
+		// We log a warning instead of a fatal error because in some
+		// environments (like Docker/K8s), vars are passed directly without a .env file.
+		logger.Warn("no .env file found, falling back to system environment variables")
+	}
+
+	// 3. Fetch URL from Environment
+	katanaStreamURL := os.Getenv("KATANA_STREAM_URL")
+	if katanaStreamURL == "" {
+		logger.Error("KATANA_URL is not set in environment")
+		os.Exit(1)
+	}
+
+	katanaRPCURL := os.Getenv("KATANA_RPC_URL")
+	if katanaRPCURL == "" {
+		logger.Error("KATANA_RPC_URL is not set in environment")
+		os.Exit(1)
+	}
+
+	dialCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	ethClient, err := ethclient.DialContext(dialCtx, katanaRPCURL)
+	if err != nil {
+		logger.Error("failed to ethClient client", "error", err)
+		return
+	}
+
+	client, err := katana.DialJSONRPCStream(
+		ctx,
+		katanaStreamURL,
+		logger,
+		prometheus.DefaultRegisterer,
+	)
+	if err != nil {
+		logger.Error("failed to init client", "error", err)
+		return
+	}
+
+	platform := app.NewPlatform(
+		ethClient,
+		common.HexToAddress("0x435f128E5E6E134C8C25Bf26F4C7b223B8F634Dd"),
+	)
+
+	client.OnNewBlock(func(ctx context.Context, s *katana.State) error {
+		return platform.SetState(s)
+	})
+
+	// --- HTTP SERVER SETUP ---
+	mux := http.NewServeMux()
+	// serve our platform frontend
+	mux.Handle("/", http.FileServer(http.Dir("../interface")))
+	// register handlers
+	mux.HandleFunc("GET /tokens", handleGetTokens(platform, logger))
+	mux.HandleFunc("GET /quote", handleQuote(platform, logger))
+	mux.HandleFunc("GET /swap", handleSwap(platform, logger))
+
+	serverPort := os.Getenv("PORT")
+
+	server := &http.Server{
+		Addr:    serverPort,
+		Handler: mux,
+	}
+
+	go func() {
+		logger.Info("starting http server", "addr", server.Addr)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Error("listen error", "error", err)
+			os.Exit(1)
+		}
+	}()
+
+	<-ctx.Done()
+	logger.Info("shutting down gracefully...")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		logger.Error("forced shutdown", "error", err)
+	}
+
+	logger.Info("server exited")
+}
+
+// --- HANDLER FUNCTIONS ---
+
+func handleGetTokens(p *app.Platform, l *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		tokens, err := p.Tokens()
+		if err != nil {
+			l.Warn("failed to fetch tokens", "error", err)
+			http.Error(w, "State unavailable", http.StatusServiceUnavailable)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(tokens)
+	}
+}
+
+func handleQuote(p *app.Platform, l *slog.Logger) http.HandlerFunc {
+	type response struct {
+		AmountOut string `json:"amount_out"`
+	}
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		// 1. Extract query parameters with explicit naming
+		tokenInStr := r.URL.Query().Get("tokenIn")
+		tokenOutStr := r.URL.Query().Get("tokenOut")
+		amountInStr := r.URL.Query().Get("amountIn")
+
+		// 2. Parse and Validate
+		if !common.IsHexAddress(tokenInStr) || !common.IsHexAddress(tokenOutStr) {
+			l.Debug("invalid hex address provided", "tokenIn", tokenInStr, "tokenOut", tokenOutStr)
+			http.Error(w, "invalid token address", http.StatusBadRequest)
+			return
+		}
+
+		amountIn := new(big.Int)
+		if _, ok := amountIn.SetString(amountInStr, 10); !ok {
+			l.Debug("invalid amount provided", "amountIn", amountInStr)
+			http.Error(w, "invalid amount", http.StatusBadRequest)
+			return
+		}
+
+		tokenIn := common.HexToAddress(tokenInStr)
+		tokenOut := common.HexToAddress(tokenOutStr)
+
+		// 3. Execute Quote via Platform
+		amountOut, err := p.Quote(tokenIn, tokenOut, amountIn)
+		if err != nil {
+			l.Warn("quote execution failed",
+				"error", err,
+				"tokenIn", tokenIn.Hex(),
+				"tokenOut", tokenOut.Hex(),
+			)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// 4. Respond with JSON string to preserve big.Int precision
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response{
+			AmountOut: amountOut.String(),
+		})
+	}
+}
+
+func handleSwap(p *app.Platform, l *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// 1. Extract query parameters
+		userStr := r.URL.Query().Get("user")
+		receiverStr := r.URL.Query().Get("receiver")
+		tokenInStr := r.URL.Query().Get("tokenIn")
+		tokenOutStr := r.URL.Query().Get("tokenOut")
+		amountInStr := r.URL.Query().Get("amountIn")
+
+		// 2. Validate Hex Addresses
+		if !common.IsHexAddress(userStr) || !common.IsHexAddress(receiverStr) ||
+			!common.IsHexAddress(tokenInStr) || !common.IsHexAddress(tokenOutStr) {
+			http.Error(w, "invalid hex address provided", http.StatusBadRequest)
+			return
+		}
+
+		// 3. Parse big.Int
+		amountIn := new(big.Int)
+		if _, ok := amountIn.SetString(amountInStr, 10); !ok {
+			http.Error(w, "invalid amountIn value", http.StatusBadRequest)
+			return
+		}
+
+		// 4. Execute the Swap logic
+		txs, err := p.Swap(
+			common.HexToAddress(userStr),
+			common.HexToAddress(receiverStr),
+			common.HexToAddress(tokenInStr),
+			common.HexToAddress(tokenOutStr),
+			amountIn,
+		)
+
+		if err != nil {
+			l.Error("swap generation failed", "error", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// 5. Return the transactions as JSON
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(txs); err != nil {
+			l.Error("failed to encode txs", "error", err)
+		}
+	}
+}
