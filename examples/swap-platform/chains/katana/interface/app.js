@@ -179,6 +179,14 @@ function getSelectedToken(selectEl) {
   return tokenMap.get(selectEl.value) || null;
 }
 
+function isSameToken() {
+  return (
+    !!elements.tokenIn?.value &&
+    !!elements.tokenOut?.value &&
+    elements.tokenIn.value === elements.tokenOut.value
+  );
+}
+
 function loadTokenSelectors(tokens) {
   const firstToken = tokens[0];
   const secondToken = tokens[1] || tokens[0];
@@ -248,6 +256,12 @@ function updateSwapButtonStateWithBalanceCheck() {
   if (!tokenIn || !tokenOut) {
     elements.swapButton.disabled = true;
     elements.swapButton.textContent = "Select Tokens";
+    return;
+  }
+
+  if (isSameToken()) {
+    elements.swapButton.disabled = true;
+    elements.swapButton.textContent = "Select Different Tokens";
     return;
   }
 
@@ -515,6 +529,10 @@ function getCurrentQuoteContext() {
     return null;
   }
 
+  if (isSameToken()) {
+    return null;
+  }
+
   if (!amountIn || Number(amountIn) <= 0) {
     return null;
   }
@@ -764,6 +782,12 @@ async function executeSwapPlan() {
 
   if (!tokenIn || !tokenOut) {
     setButtonOverride("Select Tokens");
+    updateSwapButtonStateWithBalanceCheck();
+    return;
+  }
+
+  if (isSameToken()) {
+    setButtonOverride("Select Different Tokens");
     updateSwapButtonStateWithBalanceCheck();
     return;
   }
