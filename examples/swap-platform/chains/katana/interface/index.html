@@ -17,201 +17,1031 @@
   <link rel="icon" type="image/svg+xml" href="/defistate_hex_logo.svg">
 
   <style>
-    body { font-family: 'Inter', sans-serif; }
-
-    .hero-pattern {
-      background-color: #f8fafc;
-      background-image:
-        radial-gradient(circle at 1px 1px, rgba(148,163,184,0.18) 1px, transparent 0);
-      background-size: 28px 28px;
+    :root {
+      --bg: #f7f7f5;
+      --panel: rgba(255,255,255,0.78);
+      --text: #111827;
+      --muted: #6b7280;
+      --muted-2: #9ca3af;
+      --surface: rgba(243,244,246,0.92);
+      --surface-hover: rgba(243,244,246,0.98);
     }
 
-    .glass-card {
-      background: rgba(255,255,255,0.82);
-      backdrop-filter: blur(14px);
-      -webkit-backdrop-filter: blur(14px);
+    * { box-sizing: border-box; }
+
+    html {
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
     }
 
-    .soft-ring {
-      box-shadow: 0 0 0 1px rgba(255,255,255,0.7), 0 10px 40px rgba(15,23,42,0.08);
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .hero-bg {
+      background:
+        radial-gradient(circle at 20% 20%, rgba(59,130,246,0.10), transparent 18%),
+        radial-gradient(circle at 80% 30%, rgba(99,102,241,0.09), transparent 18%),
+        radial-gradient(circle at 70% 80%, rgba(59,130,246,0.08), transparent 16%),
+        linear-gradient(180deg, #fbfbfa 0%, #f7f7f5 100%);
+    }
+
+    @keyframes floatGlowOne {
+      0% {
+        transform: translate3d(0, 0, 0) scale(1);
+      }
+      25% {
+        transform: translate3d(18px, -12px, 0) scale(1.04);
+      }
+      50% {
+        transform: translate3d(-10px, 16px, 0) scale(0.98);
+      }
+      75% {
+        transform: translate3d(14px, 10px, 0) scale(1.02);
+      }
+      100% {
+        transform: translate3d(0, 0, 0) scale(1);
+      }
+    }
+
+    @keyframes floatGlowTwo {
+      0% {
+        transform: translate3d(0, 0, 0) scale(1);
+      }
+      25% {
+        transform: translate3d(-16px, 10px, 0) scale(1.03);
+      }
+      50% {
+        transform: translate3d(12px, -14px, 0) scale(0.97);
+      }
+      75% {
+        transform: translate3d(-8px, -6px, 0) scale(1.02);
+      }
+      100% {
+        transform: translate3d(0, 0, 0) scale(1);
+      }
+    }
+
+    .page-glow::before,
+    .page-glow::after {
+      content: "";
+      position: absolute;
+      border-radius: 9999px;
+      pointer-events: none;
+      filter: blur(60px);
+      opacity: 0.55;
+      will-change: transform;
+    }
+
+    .page-glow::before {
+      width: 380px;
+      height: 380px;
+      top: 80px;
+      left: -80px;
+      background: rgba(96,165,250,0.18);
+      animation: floatGlowOne 18s ease-in-out infinite;
+    }
+
+    .page-glow::after {
+      width: 360px;
+      height: 360px;
+      right: -40px;
+      top: 180px;
+      background: rgba(129,140,248,0.14);
+      animation: floatGlowTwo 22s ease-in-out infinite;
     }
 
     .section-kicker {
       letter-spacing: 0.16em;
     }
 
-    .token-select,
-    .amount-input {
-      appearance: none;
-      width: 100%;
-      border: 1px solid rgb(226 232 240);
-      background: white;
-      border-radius: 1rem;
-      padding: 0.95rem 1rem;
-      font-size: 0.95rem;
-      font-weight: 600;
-      color: rgb(15 23 42);
-      outline: none;
-      min-width: 0;
-      transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
-    }
-
-    .token-select:focus,
-    .amount-input:focus {
-      border-color: rgb(96 165 250);
-      box-shadow: 0 0 0 4px rgba(96,165,250,0.14);
-    }
-
-    .amount-input:disabled,
-    .amount-input[readonly] {
-      background: rgb(248 250 252);
-      color: rgb(100 116 139);
-    }
-
-    .swap-panel {
+    .swap-card {
       position: relative;
-      background: linear-gradient(180deg, rgba(255,255,255,0.92) 0%, rgba(255,255,255,0.82) 100%);
-      box-shadow: 0 0 0 1px rgba(255,255,255,0.72), 0 14px 44px rgba(15,23,42,0.08);
+      width: 100%;
+      max-width: 470px;
+      margin: 0 auto;
+      border-radius: 30px;
+      background: var(--panel);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border: 1px solid rgba(255,255,255,0.9);
+      box-shadow:
+        0 10px 30px rgba(15,23,42,0.05),
+        0 30px 90px rgba(15,23,42,0.08);
+      overflow: visible;
     }
 
-    .swap-panel::before {
-      content: '';
-      position: absolute;
+    .swap-card-inner {
+      padding: 18px;
+    }
+
+    .swap-pane {
+      position: relative;
+      border-radius: 24px;
+      background: var(--surface);
+      border: 1px solid rgba(255,255,255,0.88);
+      padding: 14px 14px 12px;
+      transition: background 180ms ease, box-shadow 180ms ease;
+    }
+
+    .swap-pane:hover {
+      background: var(--surface-hover);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.45);
+    }
+
+    .pane-label-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    .pane-label {
+      font-size: 0.92rem;
+      font-weight: 600;
+      color: #4b5563;
+    }
+
+    .pane-balance {
+      font-size: 0.76rem;
+      font-weight: 600;
+      color: var(--muted-2);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 52%;
+      text-align: right;
+    }
+
+    .pane-main {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .amount-wrap {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    .amount-input {
+      width: 100%;
+      border: 0;
+      outline: none;
+      background: transparent;
+      padding: 0;
+      margin: 0;
+      font-size: clamp(2rem, 4vw, 3rem);
+      line-height: 1;
+      font-weight: 500;
+      letter-spacing: -0.04em;
+      color: var(--text);
+      min-width: 0;
+      box-shadow: none;
+    }
+
+    .amount-input:focus {
+      outline: none;
+      box-shadow: none;
+    }
+
+    .amount-input::placeholder {
+      color: #9ca3af;
+    }
+
+    .amount-input[readonly] {
+      color: #374151;
+      cursor: default;
+    }
+
+    .token-pill-wrap {
+      flex: 0 0 auto;
+      min-width: 0;
+      max-width: 190px;
+    }
+
+    .token-trigger {
+      width: 100%;
+      min-height: 50px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      border: 1px solid rgba(15,23,42,0.08);
+      outline: none;
+      border-radius: 9999px;
+      padding: 10px 14px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(249,250,251,0.98) 100%);
+      box-shadow: 0 1px 0 rgba(255,255,255,0.75) inset;
+      cursor: pointer;
+      transition: border-color 180ms ease, background-color 180ms ease, transform 180ms ease;
+      color: var(--text);
+    }
+
+    .token-trigger:hover {
+      border-color: rgba(15,23,42,0.14);
+      background: linear-gradient(180deg, rgba(255,255,255,1) 0%, rgba(249,250,251,1) 100%);
+    }
+
+    .token-trigger:active {
+      transform: translateY(1px);
+    }
+
+    .token-trigger-left {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+      flex: 1;
+    }
+
+    .token-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 9999px;
+      background: linear-gradient(180deg, #dbeafe 0%, #bfdbfe 100%);
+      color: #1d4ed8;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.72rem;
+      font-weight: 800;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+
+    .token-icon img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .token-symbol-text {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 0.98rem;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .token-chevron {
+      color: #6b7280;
+      flex-shrink: 0;
+      line-height: 1;
+      font-size: 0.9rem;
+      margin-left: 4px;
+    }
+
+    .swap-middle {
+      position: relative;
+      height: 18px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 5;
+      margin: -1px 0;
+    }
+
+    .flip-button {
+      width: 44px;
+      height: 44px;
+      border-radius: 16px;
+      border: 4px solid rgba(255,255,255,0.92);
+      background: #f8fafc;
+      color: #374151;
+      font-size: 1.05rem;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow:
+        0 8px 20px rgba(15,23,42,0.08),
+        0 0 0 1px rgba(15,23,42,0.05);
+      transition: transform 180ms ease, background-color 180ms ease, color 180ms ease;
+    }
+
+    .flip-button:hover {
+      transform: rotate(180deg);
+      background: white;
+      color: #111827;
+    }
+
+    .swap-footer {
+      margin-top: 14px;
+    }
+
+    .swap-button {
+      width: 100%;
+      border: 0;
+      outline: none;
+      border-radius: 22px;
+      padding: 17px 18px;
+      background: linear-gradient(180deg, #111827 0%, #1f2937 100%);
+      color: white;
+      font-size: 1rem;
+      font-weight: 800;
+      letter-spacing: -0.01em;
+      box-shadow:
+        0 14px 30px rgba(15,23,42,0.16),
+        inset 0 1px 0 rgba(255,255,255,0.08);
+      transition: transform 180ms ease, box-shadow 180ms ease, opacity 180ms ease;
+    }
+
+    .swap-button:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow:
+        0 16px 36px rgba(15,23,42,0.2),
+        inset 0 1px 0 rgba(255,255,255,0.08);
+    }
+
+    .swap-button:disabled {
+      opacity: 0.48;
+      cursor: not-allowed;
+    }
+
+    .hidden-native-select {
+      position: absolute !important;
+      opacity: 0 !important;
+      pointer-events: none !important;
+      width: 1px !important;
+      height: 1px !important;
+      overflow: hidden !important;
+    }
+
+    .token-modal-overlay {
+      position: fixed;
       inset: 0;
-      border-radius: 1.75rem;
+      background: rgba(15,23,42,0.42);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      z-index: 1000;
+    }
+
+    .token-modal-overlay.open {
+      display: flex;
+    }
+
+    .token-modal {
+      width: 100%;
+      max-width: 520px;
+      max-height: min(88vh, 760px);
+      overflow: hidden;
+      border-radius: 28px;
+      background: rgba(255,255,255,0.98);
+      border: 1px solid rgba(255,255,255,0.9);
+      box-shadow:
+        0 20px 60px rgba(15,23,42,0.18),
+        0 8px 24px rgba(15,23,42,0.10);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .token-modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 18px 18px 12px;
+    }
+
+    .token-modal-title {
+      font-size: 1.45rem;
+      line-height: 1.1;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      color: var(--text);
+    }
+
+    .token-modal-close {
+      width: 40px;
+      height: 40px;
+      border: 0;
+      border-radius: 14px;
+      background: #f3f4f6;
+      color: #4b5563;
+      font-size: 1.4rem;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+
+    .token-modal-close:hover {
+      background: #e5e7eb;
+      color: #111827;
+    }
+
+    .token-modal-body {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      padding: 0 18px 18px;
+    }
+
+    .token-search-wrap {
+      position: relative;
+      margin-bottom: 14px;
+    }
+
+    .token-search-icon {
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #9ca3af;
+      font-size: 1rem;
       pointer-events: none;
-      background: linear-gradient(135deg, rgba(59,130,246,0.08), transparent 28%, transparent 72%, rgba(99,102,241,0.06));
-      opacity: 0.9;
+    }
+
+    .token-search-input {
+      width: 100%;
+      border: 0;
+      outline: none;
+      border-radius: 18px;
+      background: #f3f4f6;
+      color: var(--text);
+      padding: 14px 16px 14px 42px;
+      font-size: 1rem;
+      font-weight: 500;
+    }
+
+    .token-search-input::placeholder {
+      color: #9ca3af;
+    }
+
+    .token-search-input:focus {
+      outline: none;
+      box-shadow: none;
+    }
+
+    .token-list {
+      overflow: auto;
+      min-height: 0;
+      padding-right: 2px;
+    }
+
+    .token-list::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    .token-list::-webkit-scrollbar-thumb {
+      background: rgba(156,163,175,0.45);
+      border-radius: 9999px;
+    }
+
+    .token-row {
+      width: 100%;
+      border: 0;
+      background: transparent;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 6px;
+      border-radius: 18px;
+      cursor: pointer;
+      text-align: left;
+      transition: background-color 160ms ease;
+    }
+
+    .token-row:hover {
+      background: #f8fafc;
+    }
+
+    .token-row-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 9999px;
+      background: linear-gradient(180deg, #dbeafe 0%, #bfdbfe 100%);
+      color: #1d4ed8;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.82rem;
+      font-weight: 800;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+
+    .token-row-icon img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .token-row-main {
+      min-width: 0;
+      flex: 1;
+    }
+
+    .token-row-symbol {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.2;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .token-row-name {
+      margin-top: 2px;
+      font-size: 0.86rem;
+      color: #6b7280;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .token-empty {
+      padding: 22px 6px 6px;
+      text-align: center;
+      font-size: 0.92rem;
+      color: #6b7280;
+    }
+
+    @media (max-width: 1024px) {
+      .swap-card {
+        max-width: 520px;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .page-glow::before {
+        width: 280px;
+        height: 280px;
+        top: 90px;
+        left: -90px;
+      }
+
+      .page-glow::after {
+        width: 260px;
+        height: 260px;
+        right: -90px;
+        top: 280px;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .page-glow::before {
+        animation-duration: 24s;
+      }
+
+      .page-glow::after {
+        animation-duration: 28s;
+      }
+
+      .swap-card {
+        max-width: 100%;
+        border-radius: 24px;
+      }
+
+      .swap-card-inner {
+        padding: 12px;
+      }
+
+      .swap-pane {
+        border-radius: 20px;
+        padding: 12px 12px 11px;
+      }
+
+      .pane-label-row {
+        margin-bottom: 10px;
+      }
+
+      .pane-label {
+        font-size: 0.88rem;
+      }
+
+      .pane-balance {
+        max-width: 58%;
+        font-size: 0.74rem;
+      }
+
+      .pane-main {
+        gap: 10px;
+        align-items: center;
+      }
+
+      .amount-wrap {
+        flex: 1 1 0;
+        min-width: 0;
+      }
+
+      .amount-input {
+        font-size: clamp(2rem, 10vw, 2.5rem);
+      }
+
+      .token-pill-wrap {
+        flex: 0 0 auto;
+        width: auto;
+        max-width: 46%;
+        min-width: 116px;
+      }
+
+      .token-trigger {
+        min-height: 48px;
+        padding: 9px 12px;
+        gap: 8px;
+      }
+
+      .token-trigger-left {
+        gap: 8px;
+      }
+
+      .token-symbol-text {
+        font-size: 0.92rem;
+      }
+
+      .token-icon {
+        width: 26px;
+        height: 26px;
+        font-size: 0.68rem;
+      }
+
+      .token-chevron {
+        font-size: 0.82rem;
+        margin-left: 2px;
+      }
+
+      .swap-middle {
+        height: 16px;
+      }
+
+      .flip-button {
+        width: 42px;
+        height: 42px;
+        border-radius: 14px;
+      }
+
+      .swap-button {
+        border-radius: 18px;
+        padding: 15px 16px;
+        font-size: 0.96rem;
+      }
+
+      .token-modal-overlay {
+        align-items: flex-end;
+        padding: 0;
+      }
+
+      .token-modal {
+        max-width: none;
+        width: 100%;
+        max-height: 88vh;
+        border-radius: 24px 24px 0 0;
+        border-left: 0;
+        border-right: 0;
+        border-bottom: 0;
+      }
+
+      .token-modal-header {
+        padding: 16px 16px 10px;
+      }
+
+      .token-modal-title {
+        font-size: 1.2rem;
+      }
+
+      .token-modal-body {
+        padding: 0 16px 16px;
+      }
+
+      .token-search-input {
+        font-size: 0.96rem;
+        padding-top: 13px;
+        padding-bottom: 13px;
+      }
+
+      .token-row {
+        padding: 12px 4px;
+      }
+
+      .token-row-icon {
+        width: 40px;
+        height: 40px;
+      }
     }
 
     @media (max-width: 420px) {
-      .token-select,
+      .hero-bg {
+        background:
+          radial-gradient(circle at 10% 16%, rgba(59,130,246,0.10), transparent 22%),
+          radial-gradient(circle at 90% 30%, rgba(99,102,241,0.08), transparent 20%),
+          linear-gradient(180deg, #fbfbfa 0%, #f7f7f5 100%);
+      }
+
+      .page-glow::before,
+      .page-glow::after {
+        display: none;
+      }
+
+      .swap-card {
+        border-radius: 22px;
+      }
+
+      .swap-card-inner {
+        padding: 10px;
+      }
+
+      .swap-pane {
+        border-radius: 18px;
+        padding: 11px 11px 10px;
+      }
+
+      .pane-label-row {
+        gap: 8px;
+      }
+
+      .pane-label {
+        font-size: 0.84rem;
+      }
+
+      .pane-balance {
+        font-size: 0.7rem;
+        max-width: 62%;
+      }
+
+      .pane-main {
+        gap: 8px;
+      }
+
       .amount-input {
-        padding: 0.85rem 0.9rem;
-        font-size: 0.9rem;
+        font-size: clamp(1.75rem, 10.8vw, 2.15rem);
+      }
+
+      .token-pill-wrap {
+        max-width: 48%;
+        min-width: 102px;
+      }
+
+      .token-trigger {
+        min-height: 44px;
+        padding: 8px 10px;
+      }
+
+      .token-icon {
+        width: 24px;
+        height: 24px;
+        font-size: 0.62rem;
+      }
+
+      .token-symbol-text {
+        font-size: 0.86rem;
+      }
+
+      .token-chevron {
+        font-size: 0.78rem;
+      }
+
+      .flip-button {
+        width: 40px;
+        height: 40px;
+        font-size: 0.95rem;
+        border-width: 3px;
+      }
+
+      .swap-button {
+        border-radius: 16px;
+        padding: 14px 14px;
+        font-size: 0.94rem;
+      }
+
+      .token-modal-header {
+        padding: 14px 14px 10px;
+      }
+
+      .token-modal-body {
+        padding: 0 14px 14px;
+      }
+
+      .token-search-input {
+        border-radius: 16px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .page-glow::before,
+      .page-glow::after,
+      .token-trigger,
+      .flip-button,
+      .swap-button {
+        animation: none !important;
+        transition: none !important;
       }
     }
   </style>
 </head>
-<body class="bg-slate-50 text-slate-900 antialiased">
-  <div class="relative overflow-hidden hero-pattern min-h-screen">
-    <div class="absolute inset-x-0 top-0 h-[180px] sm:h-[220px] md:h-[520px] bg-gradient-to-b from-slate-50 via-slate-50 to-transparent md:from-blue-50/80 md:via-indigo-50/40 pointer-events-none"></div>
-    <div class="hidden md:block absolute top-0 left-1/2 -translate-x-1/2 -mt-40 w-[820px] h-[820px] bg-blue-200/45 rounded-full blur-3xl pointer-events-none"></div>
-    <div class="hidden md:block absolute right-0 top-20 w-72 h-72 bg-indigo-200/30 rounded-full blur-3xl pointer-events-none"></div>
-
-    <div class="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 md:pt-16 pb-12 sm:pb-16 md:pb-24">
-      <header class="flex items-center justify-between gap-4 sm:gap-6 mb-8 sm:mb-10 md:mb-16">
+<body class="text-slate-900 antialiased min-h-screen flex flex-col">
+  <div class="relative flex-1 flex flex-col overflow-hidden hero-bg page-glow">
+    <div class="relative z-10 flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-5 sm:pt-8 md:pt-14 pb-10 sm:pb-16 md:pb-24 flex flex-col">
+      <header class="flex items-center justify-between gap-3 sm:gap-6 mb-8 sm:mb-10 md:mb-16">
         <div class="flex items-center gap-2 sm:gap-3 min-w-0">
-          <img src="/defistate_hex_logo.svg" onerror="this.style.display='none'" alt="DeFiState" class="h-10 sm:h-11 md:h-12 w-auto drop-shadow-sm shrink-0">
-          <span class="text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight text-slate-950 truncate">DeFiState</span>
+          <img
+            src="/defistate_hex_logo.svg"
+            onerror="this.style.display='none'"
+            alt="DeFiState"
+            class="h-9 sm:h-11 md:h-12 w-auto drop-shadow-sm shrink-0"
+          >
+          <span class="text-lg sm:text-2xl md:text-3xl font-extrabold tracking-tight text-slate-950 truncate">
+            DeFiState
+          </span>
         </div>
 
         <button
           id="connectWalletButton"
           type="button"
-          class="inline-flex items-center justify-center px-3.5 sm:px-5 py-2.5 sm:py-3 rounded-xl bg-slate-950 text-white text-xs sm:text-sm font-semibold hover:bg-slate-800 transition-colors shadow-lg shadow-slate-900/10 shrink-0"
+          class="inline-flex items-center justify-center px-3.5 sm:px-5 py-2.5 sm:py-3 rounded-2xl bg-slate-950 text-white text-xs sm:text-sm font-semibold hover:bg-slate-800 transition-colors shadow-lg shadow-slate-900/10 shrink-0"
         >
           Connect Wallet
         </button>
       </header>
 
-      <div class="grid grid-cols-1 lg:grid-cols-[1.05fr_0.95fr] gap-8 md:gap-10 lg:gap-12 items-start lg:items-center">
-        <section class="order-1">
-          <div class="text-[11px] sm:text-xs font-bold uppercase section-kicker text-blue-700 mb-3 sm:mb-4">Katana</div>
+      <div class="grid grid-cols-1 lg:grid-cols-[1.08fr_0.92fr] gap-8 sm:gap-10 md:gap-12 lg:gap-14 items-start lg:items-center">
+        <section class="order-2 lg:order-1">
+          <div class="text-[11px] sm:text-xs font-bold uppercase section-kicker mb-3 sm:mb-4">
+            On Katana
+          </div>
 
-          <h1 class="text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-extrabold tracking-tight leading-[0.98] text-slate-950 max-w-4xl">
-            Build Swap Platforms with <span class="text-slate-950">DeFiState</span>.
+          <h1 class="text-2xl sm:text-3xl md:text-5xl lg:text-6xl xl:text-7xl font-extrabold tracking-tight leading-[1.02] text-slate-950 max-w-4xl">
+            Build applications with <span class="text-slate-950">DeFiState</span>.
           </h1>
 
           <p class="mt-4 sm:mt-5 md:mt-6 max-w-2xl text-sm sm:text-base md:text-lg lg:text-xl leading-relaxed text-slate-600">
-            An example swap interface powered by DeFiState, built to quote and execute swaps.
+            Access DeFi data on every block across EVM chains, powering interfaces like this swap.
           </p>
 
           <div class="mt-6 sm:mt-8 flex flex-col sm:flex-row gap-3 sm:gap-4">
-            <a href="https://defistate.io/docs" class="inline-flex items-center justify-center px-5 sm:px-6 md:px-7 py-3.5 rounded-xl bg-slate-950 text-white text-sm sm:text-base font-semibold hover:bg-slate-800 transition-all shadow-lg shadow-slate-900/10">
-              View Documentation
+            <a
+              href="mailto:tobi@defistate.io"
+              class="inline-flex w-full sm:w-auto items-center justify-center gap-2 px-5 sm:px-6 py-3 sm:py-3.5 rounded-2xl bg-[#65c6f7] text-white text-sm sm:text-base font-semibold tracking-tight hover:-translate-y-[1px] transition-all duration-200 shadow-[0_8px_20px_rgba(101,198,247,0.35),0_2px_6px_rgba(0,0,0,0.08)]"
+            >
+              Contact Us
+              <span class="text-lg leading-none">→</span>
             </a>
           </div>
         </section>
 
-        <section class="order-2 glass-card rounded-[1.5rem] sm:rounded-[2rem] p-3 sm:p-4 md:p-5 border border-white/70 soft-ring">
-          <div class="swap-panel rounded-[1.35rem] sm:rounded-[1.75rem] border border-white/70 overflow-hidden">
-            <div class="relative z-10 p-4 sm:p-5 md:p-6 lg:p-7">
-              <div class="flex items-start justify-between gap-3 sm:gap-4 mb-5 sm:mb-6">
-                <div class="min-w-0">
-                  <div class="text-[11px] sm:text-xs font-bold uppercase section-kicker text-slate-500">Katana</div>
-                  <h2 class="mt-2 text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight text-slate-950">Swap</h2>
+        <section class="order-1 lg:order-2">
+          <div class="swap-card">
+            <div class="swap-card-inner">
+              <div class="swap-pane">
+                <div class="pane-label-row">
+                  <label for="amountIn" class="pane-label">Sell</label>
+                  <span id="balanceIn" class="pane-balance">Balance: -</span>
                 </div>
 
-                <div class="inline-flex items-center gap-2 rounded-full bg-blue-50 text-blue-700 border border-blue-200 px-2.5 sm:px-3 py-1.5 text-[10px] sm:text-xs font-bold uppercase tracking-wide shrink-0">
-                  <span class="w-2 h-2 rounded-full bg-blue-500"></span>
-                  Live
-                </div>
-              </div>
-
-              <div class="space-y-3 sm:space-y-4">
-                <div class="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
-                  <div class="flex items-center justify-between gap-3 mb-3">
-                    <label for="tokenIn" class="text-sm font-semibold text-slate-700">From</label>
-                    <span id="balanceIn" class="text-[11px] sm:text-xs font-medium text-slate-400 text-right truncate">Balance: -</span>
+                <div class="pane-main">
+                  <div class="amount-wrap">
+                    <input
+                      id="amountIn"
+                      class="amount-input"
+                      type="number"
+                      min="0"
+                      step="any"
+                      placeholder="0"
+                    />
                   </div>
 
-                  <div class="grid grid-cols-1 sm:grid-cols-[1fr_1.1fr] gap-3">
-                    <select id="tokenIn" class="token-select"></select>
-                    <input id="amountIn" class="amount-input" type="number" min="0" step="any" placeholder="0.0" />
-                  </div>
-                </div>
+                  <div class="token-pill-wrap">
+                    <button
+                      id="tokenInTrigger"
+                      type="button"
+                      class="token-trigger"
+                      data-token-target="in"
+                      aria-label="Select input token"
+                    >
+                      <span class="token-trigger-left">
+                        <span class="token-icon" id="tokenInIcon">
+                          <img src="/token-default.svg" alt="" />
+                        </span>
+                        <span class="token-symbol-text" id="tokenInLabel">Select token</span>
+                      </span>
+                      <span class="token-chevron">▾</span>
+                    </button>
 
-                <div class="flex justify-center">
-                  <button
-                    id="flipButton"
-                    type="button"
-                    class="inline-flex items-center justify-center w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-950 transition shadow-sm"
-                    aria-label="Flip tokens"
-                    title="Flip tokens"
-                  >
-                    ⇅
-                  </button>
-                </div>
-
-                <div class="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
-                  <div class="flex items-center justify-between gap-3 mb-3">
-                    <label for="tokenOut" class="text-sm font-semibold text-slate-700">To</label>
-                    <span id="balanceOut" class="text-[11px] sm:text-xs font-medium text-slate-400 text-right truncate">Balance: -</span>
-                  </div>
-
-                  <div class="grid grid-cols-1 sm:grid-cols-[1fr_1.1fr] gap-3">
-                    <select id="tokenOut" class="token-select"></select>
-                    <input id="amountOut" class="amount-input" type="text" placeholder="Quote" readonly />
+                    <select id="tokenIn" class="hidden-native-select"></select>
                   </div>
                 </div>
               </div>
 
-              <div class="mt-4 sm:mt-5 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                <div class="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500 mb-1">Status</div>
-                <div id="status" class="text-sm font-semibold text-slate-900 break-words">Loading tokens...</div>
+              <div class="swap-middle">
+                <button
+                  id="flipButton"
+                  type="button"
+                  class="flip-button"
+                  aria-label="Flip tokens"
+                  title="Flip tokens"
+                >
+                  ↓
+                </button>
               </div>
 
-              <button
-                id="swapButton"
-                type="button"
-                class="mt-4 sm:mt-5 w-full inline-flex items-center justify-center px-6 py-3.5 sm:py-4 rounded-2xl bg-slate-950 text-white font-bold text-sm sm:text-base hover:bg-slate-800 transition-all shadow-lg shadow-slate-900/10 disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled
-              >
-                Swap
-              </button>
+              <div class="swap-pane">
+                <div class="pane-label-row">
+                  <label for="amountOut" class="pane-label">Buy</label>
+                  <span id="balanceOut" class="pane-balance">Balance: -</span>
+                </div>
 
-              <p class="mt-3 sm:mt-4 text-[11px] sm:text-xs text-slate-500 leading-relaxed">
-                Connect a wallet, request a quote, and submit the transaction.
-              </p>
+                <div class="pane-main">
+                  <div class="amount-wrap">
+                    <input
+                      id="amountOut"
+                      class="amount-input"
+                      type="text"
+                      placeholder="0"
+                      readonly
+                    />
+                  </div>
+
+                  <div class="token-pill-wrap">
+                    <button
+                      id="tokenOutTrigger"
+                      type="button"
+                      class="token-trigger"
+                      data-token-target="out"
+                      aria-label="Select output token"
+                    >
+                      <span class="token-trigger-left">
+                        <span class="token-icon" id="tokenOutIcon">
+                          <img src="/token-default.svg" alt="" />
+                        </span>
+                        <span class="token-symbol-text" id="tokenOutLabel">Select token</span>
+                      </span>
+                      <span class="token-chevron">▾</span>
+                    </button>
+
+                    <select id="tokenOut" class="hidden-native-select"></select>
+                  </div>
+                </div>
+              </div>
+
+              <div class="swap-footer">
+                <button
+                  id="swapButton"
+                  type="button"
+                  class="swap-button"
+                  disabled
+                >
+                  Swap
+                </button>
+              </div>
             </div>
           </div>
         </section>
       </div>
+    </div>
+  </div>
 
-      <footer class="mt-12 sm:mt-16 border-t border-slate-200 pt-6 sm:pt-8 text-center text-xs sm:text-sm text-slate-500">
-        <span id="current-year"></span> DeFiState Inc.
-      </footer>
+  <div
+    id="tokenModalOverlay"
+    class="token-modal-overlay"
+    aria-hidden="true"
+  >
+    <div
+      class="token-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="tokenModalTitle"
+    >
+      <div class="token-modal-header">
+        <h2 class="token-modal-title" id="tokenModalTitle">Select a token</h2>
+        <button
+          id="tokenModalClose"
+          type="button"
+          class="token-modal-close"
+          aria-label="Close token selector"
+        >
+          ×
+        </button>
+      </div>
+
+      <div class="token-modal-body">
+        <div class="token-search-wrap">
+          <span class="token-search-icon">⌕</span>
+          <input
+            id="tokenSearchInput"
+            type="text"
+            class="token-search-input"
+            placeholder="Search name, symbol, or address"
+            autocomplete="off"
+          />
+        </div>
+
+        <div id="tokenList" class="token-list"></div>
+      </div>
     </div>
   </div>
 

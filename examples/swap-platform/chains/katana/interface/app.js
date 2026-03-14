@@ -3,6 +3,8 @@ const NATIVE_TOKEN_PLACEHOLDERS = new Set([
   "native",
 ]);
 
+const DEFAULT_TOKEN_IMAGE = "/token-default.svg";
+
 const QUOTE_DEBOUNCE_MS = 200;
 const QUOTE_REFRESH_MS = 200;
 
@@ -13,7 +15,6 @@ const elements = {
   amountOut: document.getElementById("amountOut"),
   balanceIn: document.getElementById("balanceIn"),
   balanceOut: document.getElementById("balanceOut"),
-  status: document.getElementById("status"),
   flipButton: document.getElementById("flipButton"),
   swapButton: document.getElementById("swapButton"),
   connectWalletButton: document.getElementById("connectWalletButton"),
@@ -42,27 +43,29 @@ let lastSettledQuote = "";
 let lastQuoteSignature = "";
 
 let isSwapExecuting = false;
+let buttonMessageOverride = "";
 
-function setStatus(message, tone = "neutral") {
-  elements.status.textContent = message;
-  elements.status.className = "text-sm font-semibold";
+function dispatchElementEvents(element, eventNames = ["change", "input"]) {
+  if (!element) return;
 
-  if (tone === "success") {
-    elements.status.classList.add("text-emerald-600");
-    return;
+  for (const eventName of eventNames) {
+    element.dispatchEvent(new Event(eventName, { bubbles: true }));
   }
+}
 
-  if (tone === "error") {
-    elements.status.classList.add("text-red-600");
-    return;
+function setButtonOverride(message) {
+  buttonMessageOverride = message || "";
+  if (elements.swapButton && buttonMessageOverride) {
+    elements.swapButton.textContent = buttonMessageOverride;
   }
+}
 
-  if (tone === "warning") {
-    elements.status.classList.add("text-amber-600");
-    return;
-  }
+function clearButtonOverride() {
+  buttonMessageOverride = "";
+}
 
-  elements.status.classList.add("text-slate-900");
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function isHexString(value) {
@@ -192,11 +195,14 @@ function loadTokenSelectors(tokens) {
 }
 
 function flipSelectedTokens() {
-  const currentIn = elements.tokenIn.value;
-  const currentOut = elements.tokenOut.value;
+  const currentInToken = elements.tokenIn.value;
+  const currentOutToken = elements.tokenOut.value;
 
-  elements.tokenIn.value = currentOut;
-  elements.tokenOut.value = currentIn;
+  elements.tokenIn.value = currentOutToken;
+  elements.tokenOut.value = currentInToken;
+
+  dispatchElementEvents(elements.tokenIn, ["change", "input"]);
+  dispatchElementEvents(elements.tokenOut, ["change", "input"]);
 }
 
 function updateConnectWalletButton() {
@@ -220,6 +226,12 @@ function updateSwapButtonState() {
 function updateSwapButtonStateWithBalanceCheck() {
   if (isSwapExecuting) {
     elements.swapButton.disabled = true;
+    return;
+  }
+
+  if (buttonMessageOverride) {
+    elements.swapButton.disabled = true;
+    elements.swapButton.textContent = buttonMessageOverride;
     return;
   }
 
@@ -626,7 +638,7 @@ function stopQuoteRefreshLoop() {
 }
 
 async function loadTokens() {
-  setStatus("Loading tokens...");
+  setButtonOverride("Loading tokens...");
 
   try {
     const response = await fetch("/tokens", {
@@ -651,7 +663,7 @@ async function loadTokens() {
     rebuildTokenMap(tokensState);
     loadTokenSelectors(tokensState);
 
-    setStatus("Ready", "success");
+    clearButtonOverride();
     updateSwapButtonState();
 
     if (walletState.connected) {
@@ -662,9 +674,8 @@ async function loadTokens() {
     updateSwapButtonStateWithBalanceCheck();
   } catch (error) {
     console.error("failed to load tokens:", error);
-    setStatus("Failed to load tokens", "error");
+    setButtonOverride("Unavailable");
     elements.swapButton.disabled = true;
-    elements.swapButton.textContent = "Unavailable";
   }
 }
 
@@ -683,8 +694,8 @@ async function syncWalletStateFromProvider() {
 
   if (walletState.connected) {
     clearBalanceCache();
+    clearButtonOverride();
     await refreshDisplayedBalances();
-    setStatus("Wallet connected", "success");
   } else {
     resetDisplayedBalances();
   }
@@ -694,13 +705,14 @@ async function syncWalletStateFromProvider() {
 
 async function connectWallet() {
   if (!window.ethereum) {
-    setStatus("No wallet detected", "error");
+    setButtonOverride("No Wallet");
     updateSwapButtonStateWithBalanceCheck();
     return;
   }
 
   try {
-    setStatus("Connecting wallet...", "warning");
+    setButtonOverride("Connecting...");
+    updateSwapButtonStateWithBalanceCheck();
 
     const accounts = await rpcCall("eth_requestAccounts", []);
 
@@ -708,11 +720,17 @@ async function connectWallet() {
       throw new Error("No accounts returned");
     }
 
+    clearButtonOverride();
     await syncWalletStateFromProvider();
   } catch (error) {
     console.error("wallet connection failed:", error);
-    setStatus("Wallet connection failed", "error");
+    setButtonOverride("Connection Failed");
     updateSwapButtonStateWithBalanceCheck();
+
+    setTimeout(() => {
+      clearButtonOverride();
+      updateSwapButtonStateWithBalanceCheck();
+    }, 2000);
   }
 }
 
@@ -727,7 +745,7 @@ async function waitForTransactionReceipt(txHash, pollMs = 1200) {
       return receipt;
     }
 
-    await new Promise((resolve) => setTimeout(resolve, pollMs));
+    await sleep(pollMs);
   }
 }
 
@@ -739,19 +757,19 @@ async function executeSwapPlan() {
   const amountInHuman = String(elements.amountIn.value || "").trim();
 
   if (!walletState.connected || !walletState.address) {
-    setStatus("Connect wallet first", "warning");
+    setButtonOverride("Connect Wallet");
     updateSwapButtonStateWithBalanceCheck();
     return;
   }
 
   if (!tokenIn || !tokenOut) {
-    setStatus("Select tokens", "warning");
+    setButtonOverride("Select Tokens");
     updateSwapButtonStateWithBalanceCheck();
     return;
   }
 
   if (!amountInHuman) {
-    setStatus("Enter amount", "warning");
+    setButtonOverride("Enter Amount");
     updateSwapButtonStateWithBalanceCheck();
     return;
   }
@@ -761,13 +779,13 @@ async function executeSwapPlan() {
     amountInRaw = parseUnits(amountInHuman, getTokenDecimals(tokenIn));
   } catch (error) {
     console.error("invalid amount for swap:", error);
-    setStatus("Invalid amount", "error");
+    setButtonOverride("Invalid Amount");
     updateSwapButtonStateWithBalanceCheck();
     return;
   }
 
   if (amountInRaw <= 0n) {
-    setStatus("Enter amount", "warning");
+    setButtonOverride("Enter Amount");
     updateSwapButtonStateWithBalanceCheck();
     return;
   }
@@ -785,8 +803,6 @@ async function executeSwapPlan() {
       amountIn: amountInRaw.toString(),
     });
 
-    setStatus("Building transaction plan...", "warning");
-
     const response = await fetch(`/swap?${params.toString()}`, {
       method: "GET",
       cache: "no-store",
@@ -803,8 +819,8 @@ async function executeSwapPlan() {
 
     const txs = await response.json();
 
-    if (txs.length === 0) {
-      console.error("swap response missing txs:", result);
+    if (!Array.isArray(txs) || txs.length === 0) {
+      console.error("swap response missing txs:", txs);
       throw new Error("No transactions returned");
     }
 
@@ -816,11 +832,8 @@ async function executeSwapPlan() {
         throw new Error(`Invalid tx at index ${i}`);
       }
 
-      const label = tx.kind || tx.label || `Tx ${i + 1}/${txs.length}`;
-
       elements.swapButton.textContent =
-        txs.length > 1 ? `Confirm ${i + 1}/${txs.length}` : "Confirm Swap";
-      setStatus(`Awaiting wallet confirmation: ${label}`, "warning");
+        txs.length > 1 ? `Confirm ${i + 1}/${txs.length}` : "Confirm in Wallet";
 
       const txHash = await window.ethereum.request({
         method: "eth_sendTransaction",
@@ -834,7 +847,6 @@ async function executeSwapPlan() {
         ],
       });
 
-      setStatus(`Pending confirmation: ${txHash.slice(0, 10)}...`, "warning");
       elements.swapButton.textContent =
         txs.length > 1 ? `Pending ${i + 1}/${txs.length}` : "Pending";
 
@@ -847,23 +859,24 @@ async function executeSwapPlan() {
       clearBalanceCache();
       await refreshDisplayedBalances();
       await fetchQuote();
-
-      setStatus(`Confirmed: ${txHash.slice(0, 10)}...`, "success");
     }
 
-    setStatus("Swap complete", "success");
-    elements.swapButton.textContent = "Swap";
+    elements.swapButton.textContent = "Swap Complete";
+    await sleep(1500);
   } catch (error) {
     console.error("swap execution failed:", error);
 
     const errorMessage = String(error?.message || "").toLowerCase();
     if (errorMessage.includes("user rejected") || errorMessage.includes("user denied")) {
-      setStatus("Transaction rejected", "warning");
+      elements.swapButton.textContent = "Transaction Rejected";
     } else {
-      setStatus("Swap failed", "error");
+      elements.swapButton.textContent = "Swap Failed";
     }
+
+    await sleep(1200);
   } finally {
     isSwapExecuting = false;
+    clearButtonOverride();
     updateSwapButtonStateWithBalanceCheck();
   }
 }
@@ -880,11 +893,9 @@ function bindWalletEvents() {
     clearBalanceCache();
 
     if (walletState.connected) {
-      setStatus("Account changed", "success");
       await refreshDisplayedBalances();
     } else {
       resetDisplayedBalances();
-      setStatus("Wallet disconnected", "warning");
     }
 
     await fetchQuote();
@@ -896,7 +907,6 @@ function bindWalletEvents() {
     clearBalanceCache();
 
     if (walletState.connected) {
-      setStatus("Network changed", "warning");
       await refreshDisplayedBalances();
     }
 
@@ -909,12 +919,19 @@ function bindEvents() {
   elements.flipButton.addEventListener("click", async () => {
     if (tokensState.length < 2) return;
 
+    const previousQuotedOut = String(elements.amountOut.value || "").trim();
+
     flipSelectedTokens();
+
+    elements.amountIn.value = previousQuotedOut || "";
+    elements.amountOut.value = "";
     resetQuoteDisplay();
 
     if (walletState.connected) {
       await refreshDisplayedBalances();
     }
+
+    dispatchElementEvents(elements.amountIn, ["input"]);
 
     await fetchQuote();
     updateSwapButtonStateWithBalanceCheck();
@@ -949,13 +966,226 @@ function bindEvents() {
 
   elements.amountIn.addEventListener("input", () => {
     resetQuoteDisplay();
+    clearButtonOverride();
     updateSwapButtonStateWithBalanceCheck();
     debounceQuoteFetch();
   });
 
   elements.swapButton.addEventListener("click", async () => {
+    if (!walletState.connected) {
+      await connectWallet();
+      return;
+    }
+
     await executeSwapPlan();
   });
+}
+
+function enableTokenSelectionModal() {
+  const tokenInSelect = document.getElementById("tokenIn");
+  const tokenOutSelect = document.getElementById("tokenOut");
+
+  const tokenInTrigger = document.getElementById("tokenInTrigger");
+  const tokenOutTrigger = document.getElementById("tokenOutTrigger");
+
+  const tokenInLabel = document.getElementById("tokenInLabel");
+  const tokenOutLabel = document.getElementById("tokenOutLabel");
+
+  const tokenInIcon = document.getElementById("tokenInIcon");
+  const tokenOutIcon = document.getElementById("tokenOutIcon");
+
+  const modalOverlay = document.getElementById("tokenModalOverlay");
+  const modalClose = document.getElementById("tokenModalClose");
+  const tokenList = document.getElementById("tokenList");
+  const tokenSearchInput = document.getElementById("tokenSearchInput");
+
+  if (
+    !tokenInSelect ||
+    !tokenOutSelect ||
+    !tokenInTrigger ||
+    !tokenOutTrigger ||
+    !tokenInLabel ||
+    !tokenOutLabel ||
+    !tokenInIcon ||
+    !tokenOutIcon ||
+    !modalOverlay ||
+    !modalClose ||
+    !tokenList ||
+    !tokenSearchInput
+  ) {
+    return;
+  }
+
+  let activeTarget = "in";
+
+  function getInitials(text) {
+    if (!text) return "?";
+    return text.replace(/[^a-zA-Z0-9]/g, "").slice(0, 3).toUpperCase() || "?";
+  }
+
+  function getSelectOptions(select) {
+    return Array.from(select.options).map((opt) => ({
+      value: opt.value,
+      label: opt.textContent || opt.label || opt.value || "Token",
+    }));
+  }
+
+  function ensureDefaultTokenImage(iconEl, label) {
+    iconEl.innerHTML = "";
+
+    const img = document.createElement("img");
+    img.src = DEFAULT_TOKEN_IMAGE;
+    img.alt = label || "Token";
+    img.loading = "lazy";
+
+    img.onerror = () => {
+      iconEl.textContent = getInitials(label);
+    };
+
+    iconEl.appendChild(img);
+  }
+
+  function syncTrigger(select, labelEl, iconEl) {
+    const selectedOption = select.options[select.selectedIndex];
+    const label = selectedOption
+      ? (selectedOption.textContent || selectedOption.label || "Select token")
+      : "Select token";
+
+    labelEl.textContent = label || "Select token";
+    ensureDefaultTokenImage(iconEl, label);
+  }
+
+  function syncAllTriggers() {
+    syncTrigger(tokenInSelect, tokenInLabel, tokenInIcon);
+    syncTrigger(tokenOutSelect, tokenOutLabel, tokenOutIcon);
+  }
+
+  function escapeHtml(value) {
+    return String(value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function renderTokenList(filter = "") {
+    const sourceSelect = activeTarget === "in" ? tokenInSelect : tokenOutSelect;
+    const options = getSelectOptions(sourceSelect);
+
+    const q = filter.trim().toLowerCase();
+    const filtered = options.filter((item) => {
+      const label = item.label.toLowerCase();
+      const value = item.value.toLowerCase();
+      return !q || label.includes(q) || value.includes(q);
+    });
+
+    if (!filtered.length) {
+      tokenList.innerHTML = '<div class="token-empty">No matching tokens found.</div>';
+      return;
+    }
+
+    tokenList.innerHTML = filtered.map((item) => `
+      <button class="token-row" type="button" data-value="${escapeHtml(item.value)}">
+        <span class="token-row-icon">
+          <img
+            src="${DEFAULT_TOKEN_IMAGE}"
+            alt="${escapeHtml(item.label)}"
+            loading="lazy"
+            onerror="this.style.display='none'; this.parentElement.textContent='${getInitials(item.label)}';"
+          />
+        </span>
+        <span class="token-row-main">
+          <div class="token-row-symbol">${escapeHtml(item.label)}</div>
+          <div class="token-row-name">${escapeHtml(item.value || "Token")}</div>
+        </span>
+      </button>
+    `).join("");
+  }
+
+  function openModal(target) {
+    activeTarget = target;
+    modalOverlay.classList.add("open");
+    modalOverlay.setAttribute("aria-hidden", "false");
+    tokenSearchInput.value = "";
+    renderTokenList("");
+    document.body.style.overflow = "hidden";
+
+    setTimeout(() => {
+      tokenSearchInput.focus();
+    }, 10);
+  }
+
+  function closeModal() {
+    modalOverlay.classList.remove("open");
+    modalOverlay.setAttribute("aria-hidden", "true");
+    document.body.style.overflow = "";
+  }
+
+  function setSelectValue(select, value) {
+    select.value = value;
+    dispatchElementEvents(select, ["change", "input"]);
+  }
+
+  tokenInTrigger.addEventListener("click", () => openModal("in"));
+  tokenOutTrigger.addEventListener("click", () => openModal("out"));
+
+  modalClose.addEventListener("click", closeModal);
+
+  modalOverlay.addEventListener("click", (event) => {
+    if (event.target === modalOverlay) {
+      closeModal();
+    }
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && modalOverlay.classList.contains("open")) {
+      closeModal();
+    }
+  });
+
+  tokenSearchInput.addEventListener("input", (event) => {
+    renderTokenList(event.target.value);
+  });
+
+  tokenList.addEventListener("click", (event) => {
+    const row = event.target.closest(".token-row");
+    if (!row) return;
+
+    const value = row.getAttribute("data-value");
+    const select = activeTarget === "in" ? tokenInSelect : tokenOutSelect;
+
+    setSelectValue(select, value);
+    syncAllTriggers();
+    closeModal();
+  });
+
+  tokenInSelect.addEventListener("change", syncAllTriggers);
+  tokenOutSelect.addEventListener("change", syncAllTriggers);
+
+  const observer = new MutationObserver(() => {
+    syncAllTriggers();
+
+    if (modalOverlay.classList.contains("open")) {
+      renderTokenList(tokenSearchInput.value);
+    }
+  });
+
+  observer.observe(tokenInSelect, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+  });
+
+  observer.observe(tokenOutSelect, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+  });
+
+  window.addEventListener("load", syncAllTriggers);
+
+  setTimeout(syncAllTriggers, 300);
+  setTimeout(syncAllTriggers, 1000);
 }
 
 async function init() {
@@ -963,6 +1193,7 @@ async function init() {
     elements.currentYear.textContent = new Date().getFullYear();
   }
 
+  enableTokenSelectionModal();
   resetDisplayedBalances();
   resetQuoteDisplay();
   updateConnectWalletButton();
