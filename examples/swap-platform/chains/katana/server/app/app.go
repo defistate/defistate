@@ -96,6 +96,9 @@ func (p *Platform) Quote(
 		return nil, err
 	}
 
+	if amountOut == nil {
+		return new(big.Int), nil
+	}
 	return amountOut, nil
 }
 
