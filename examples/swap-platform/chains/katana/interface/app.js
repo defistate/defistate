@@ -3,6 +3,9 @@ const NATIVE_TOKEN_PLACEHOLDERS = new Set([
   "native",
 ]);
 
+const SUSHI_TOKEN_LOGO_BASE =
+  "https://cdn.sushi.com/image/upload/f_auto,c_limit,w_32/d_unknown.png/tokens/747474";
+
 const DEFAULT_TOKEN_IMAGE = "/public/token-default.svg";
 
 const QUOTE_DEBOUNCE_MS = 200;
@@ -135,6 +138,29 @@ function getTokenLabel(token) {
   return getTokenSymbol(token);
 }
 
+function normalizeTokenKey(value) {
+  return typeof value === "string" ? value.toLowerCase() : "";
+}
+
+function generateTokenLogoUrl(address) {
+  const normalized = normalizeTokenKey(address);
+
+  if (!isValidAddress(normalized)) {
+    return DEFAULT_TOKEN_IMAGE;
+  }
+
+  return `${SUSHI_TOKEN_LOGO_BASE}/${normalized}.jpg`;
+}
+
+function getTokenLogoUrl(tokenOrValue) {
+  const value =
+    typeof tokenOrValue === "string"
+      ? tokenOrValue
+      : getTokenAddress(tokenOrValue) || getTokenValue(tokenOrValue);
+
+  return generateTokenLogoUrl(value);
+}
+
 function isNativeToken(token) {
   if (!token) return false;
 
@@ -177,6 +203,14 @@ function rebuildTokenMap(tokens) {
 
 function getSelectedToken(selectEl) {
   return tokenMap.get(selectEl.value) || null;
+}
+
+function getSelectOptions(select) {
+  return Array.from(select.options).map((opt) => ({
+    value: opt.value,
+    label: opt.textContent || opt.label || opt.value || "Token",
+    logo: getTokenLogoUrl(opt.value),
+  }));
 }
 
 function isSameToken() {
@@ -1047,23 +1081,22 @@ function enableTokenSelectionModal() {
     return text.replace(/[^a-zA-Z0-9]/g, "").slice(0, 3).toUpperCase() || "?";
   }
 
-  function getSelectOptions(select) {
-    return Array.from(select.options).map((opt) => ({
-      value: opt.value,
-      label: opt.textContent || opt.label || opt.value || "Token",
-    }));
-  }
-
-  function ensureDefaultTokenImage(iconEl, label) {
+  function setTokenIcon(iconEl, tokenOrValue, label) {
     iconEl.innerHTML = "";
 
     const img = document.createElement("img");
-    img.src = DEFAULT_TOKEN_IMAGE;
+    img.src = getTokenLogoUrl(tokenOrValue);
     img.alt = label || "Token";
     img.loading = "lazy";
 
     img.onerror = () => {
-      iconEl.textContent = getInitials(label);
+      if (img.dataset.fallbackApplied === "true") {
+        iconEl.textContent = getInitials(label);
+        return;
+      }
+
+      img.dataset.fallbackApplied = "true";
+      img.src = DEFAULT_TOKEN_IMAGE;
     };
 
     iconEl.appendChild(img);
@@ -1075,8 +1108,10 @@ function enableTokenSelectionModal() {
       ? (selectedOption.textContent || selectedOption.label || "Select token")
       : "Select token";
 
+    const value = selectedOption ? selectedOption.value : "";
+
     labelEl.textContent = label || "Select token";
-    ensureDefaultTokenImage(iconEl, label);
+    setTokenIcon(iconEl, value, label);
   }
 
   function syncAllTriggers() {
@@ -1112,10 +1147,10 @@ function enableTokenSelectionModal() {
       <button class="token-row" type="button" data-value="${escapeHtml(item.value)}">
         <span class="token-row-icon">
           <img
-            src="${DEFAULT_TOKEN_IMAGE}"
+            src="${escapeHtml(item.logo)}"
             alt="${escapeHtml(item.label)}"
             loading="lazy"
-            onerror="this.style.display='none'; this.parentElement.textContent='${getInitials(item.label)}';"
+            data-default-src="${escapeHtml(DEFAULT_TOKEN_IMAGE)}"
           />
         </span>
         <span class="token-row-main">
@@ -1124,6 +1159,21 @@ function enableTokenSelectionModal() {
         </span>
       </button>
     `).join("");
+
+    const images = tokenList.querySelectorAll("img");
+
+    for (const img of images) {
+      img.onerror = () => {
+        if (img.dataset.fallbackApplied === "true") {
+          img.style.display = "none";
+          img.parentElement.textContent = getInitials(img.alt);
+          return;
+        }
+
+        img.dataset.fallbackApplied = "true";
+        img.src = img.dataset.defaultSrc || DEFAULT_TOKEN_IMAGE;
+      };
+    }
   }
 
   function openModal(target) {
