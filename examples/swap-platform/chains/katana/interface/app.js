@@ -1262,11 +1262,29 @@ function enableTokenSelectionModal() {
   setTimeout(syncAllTriggers, 1000);
 }
 
+function ensureProperAmountInput() {
+  elements.amountIn.addEventListener("input", () => {
+    let value =  elements.amountIn.value;
+
+    // remove invalid characters
+    value = value.replace(/[^0-9.]/g, "");
+
+    // allow only one decimal point
+    const parts = value.split(".");
+    if (parts.length > 2) {
+      value = parts[0] + "." + parts.slice(1).join("");
+    }
+
+    elements.amountIn.value = value;
+  });
+}
+
 async function init() {
   if (elements.currentYear) {
     elements.currentYear.textContent = new Date().getFullYear();
   }
 
+  ensureProperAmountInput()
   enableTokenSelectionModal();
   resetDisplayedBalances();
   resetQuoteDisplay();
