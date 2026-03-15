@@ -96,10 +96,6 @@ func (p *Platform) Quote(
 		return nil, err
 	}
 
-	if amountOut == nil || amountOut.Sign() == 0 {
-		return nil, errors.New("no route found with positive output")
-	}
-
 	return amountOut, nil
 }
 
