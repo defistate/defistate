@@ -3,7 +3,7 @@ const NATIVE_TOKEN_PLACEHOLDERS = new Set([
   "native",
 ]);
 
-const DEFAULT_TOKEN_IMAGE = "/token-default.svg";
+const DEFAULT_TOKEN_IMAGE = "/public/token-default.svg";
 
 const QUOTE_DEBOUNCE_MS = 200;
 const QUOTE_REFRESH_MS = 200;
@@ -217,7 +217,7 @@ function updateConnectWalletButton() {
   if (!elements.connectWalletButton) return;
 
   if (!walletState.connected) {
-    elements.connectWalletButton.textContent = "Connect Wallet";
+    elements.connectWalletButton.textContent = "Connect";
     return;
   }
 
@@ -245,7 +245,7 @@ function updateSwapButtonStateWithBalanceCheck() {
 
   if (!walletState.connected) {
     elements.swapButton.disabled = true;
-    elements.swapButton.textContent = "Connect Wallet";
+    elements.swapButton.textContent = "Connect";
     return;
   }
 
@@ -775,7 +775,7 @@ async function executeSwapPlan() {
   const amountInHuman = String(elements.amountIn.value || "").trim();
 
   if (!walletState.connected || !walletState.address) {
-    setButtonOverride("Connect Wallet");
+    setButtonOverride("Connect");
     updateSwapButtonStateWithBalanceCheck();
     return;
   }
