@@ -3,18 +3,18 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DeFiState Swap</title>
+  <title>DeFiState — Katana Swap Demo</title>
 
   <script src="https://cdn.tailwindcss.com"></script>
 
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
     rel="stylesheet"
-  >
+  />
 
-  <link rel="icon" type="image/svg+xml" href="/defistate_hex_logo.svg">
+  <link rel="icon" type="image/svg+xml" href="/public/defistate_hex_logo.svg" />
 
   <style>
     :root {
@@ -25,6 +25,9 @@
       --muted-2: #9ca3af;
       --surface: rgba(243,244,246,0.92);
       --surface-hover: rgba(243,244,246,0.98);
+      --brand-1: #38bdf8;
+      --brand-2: #0ea5e9;
+      --brand-shadow: rgba(14,165,233,0.26);
     }
 
     * { box-sizing: border-box; }
@@ -32,10 +35,11 @@
     html {
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
+      scroll-behavior: smooth;
     }
 
     body {
-      font-family: 'Inter', sans-serif;
+      font-family: "Plus Jakarta Sans", sans-serif;
       background: var(--bg);
       color: var(--text);
     }
@@ -49,39 +53,24 @@
     }
 
     @keyframes floatGlowOne {
-      0% {
-        transform: translate3d(0, 0, 0) scale(1);
-      }
-      25% {
-        transform: translate3d(18px, -12px, 0) scale(1.04);
-      }
-      50% {
-        transform: translate3d(-10px, 16px, 0) scale(0.98);
-      }
-      75% {
-        transform: translate3d(14px, 10px, 0) scale(1.02);
-      }
-      100% {
-        transform: translate3d(0, 0, 0) scale(1);
-      }
+      0% { transform: translate3d(0, 0, 0) scale(1); }
+      25% { transform: translate3d(18px, -12px, 0) scale(1.04); }
+      50% { transform: translate3d(-10px, 16px, 0) scale(0.98); }
+      75% { transform: translate3d(14px, 10px, 0) scale(1.02); }
+      100% { transform: translate3d(0, 0, 0) scale(1); }
     }
 
     @keyframes floatGlowTwo {
-      0% {
-        transform: translate3d(0, 0, 0) scale(1);
-      }
-      25% {
-        transform: translate3d(-16px, 10px, 0) scale(1.03);
-      }
-      50% {
-        transform: translate3d(12px, -14px, 0) scale(0.97);
-      }
-      75% {
-        transform: translate3d(-8px, -6px, 0) scale(1.02);
-      }
-      100% {
-        transform: translate3d(0, 0, 0) scale(1);
-      }
+      0% { transform: translate3d(0, 0, 0) scale(1); }
+      25% { transform: translate3d(-16px, 10px, 0) scale(1.03); }
+      50% { transform: translate3d(12px, -14px, 0) scale(0.97); }
+      75% { transform: translate3d(-8px, -6px, 0) scale(1.02); }
+      100% { transform: translate3d(0, 0, 0) scale(1); }
+    }
+
+    @keyframes softFloat {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-3px); }
     }
 
     .page-glow::before,
@@ -111,10 +100,6 @@
       top: 180px;
       background: rgba(129,140,248,0.14);
       animation: floatGlowTwo 22s ease-in-out infinite;
-    }
-
-    .section-kicker {
-      letter-spacing: 0.16em;
     }
 
     .swap-card {
@@ -198,7 +183,7 @@
       font-size: clamp(2rem, 4vw, 3rem);
       line-height: 1;
       font-weight: 500;
-      letter-spacing: -0.04em;
+      letter-spacing: -0.05em;
       color: var(--text);
       min-width: 0;
       box-shadow: none;
@@ -343,27 +328,30 @@
       outline: none;
       border-radius: 22px;
       padding: 17px 18px;
-      background: linear-gradient(180deg, #111827 0%, #1f2937 100%);
+      background: linear-gradient(180deg, var(--brand-1) 0%, var(--brand-2) 100%);
       color: white;
       font-size: 1rem;
       font-weight: 800;
-      letter-spacing: -0.01em;
+      letter-spacing: -0.02em;
       box-shadow:
-        0 14px 30px rgba(15,23,42,0.16),
-        inset 0 1px 0 rgba(255,255,255,0.08);
-      transition: transform 180ms ease, box-shadow 180ms ease, opacity 180ms ease;
+        0 14px 30px var(--brand-shadow),
+        inset 0 1px 0 rgba(255,255,255,0.12);
+      transition: transform 180ms ease, box-shadow 180ms ease, opacity 180ms ease, background 180ms ease;
     }
 
     .swap-button:hover:not(:disabled) {
       transform: translateY(-1px);
       box-shadow:
-        0 16px 36px rgba(15,23,42,0.2),
-        inset 0 1px 0 rgba(255,255,255,0.08);
+        0 16px 36px rgba(14,165,233,0.32),
+        inset 0 1px 0 rgba(255,255,255,0.12);
     }
 
     .swap-button:disabled {
-      opacity: 0.48;
+      background: linear-gradient(180deg, #e5e7eb 0%, #dbe3ea 100%);
+      color: #94a3b8;
+      opacity: 1;
       cursor: not-allowed;
+      box-shadow: none;
     }
 
     .hidden-native-select {
@@ -572,10 +560,473 @@
       color: #6b7280;
     }
 
-    @media (max-width: 1024px) {
-      .swap-card {
-        max-width: 520px;
+    .how-card {
+      position: relative;
+      border-radius: 30px;
+      min-height: 100%;
+      overflow: hidden;
+      transition: transform 180ms ease, box-shadow 180ms ease;
+    }
+
+    .how-card:hover {
+      transform: translateY(-2px);
+    }
+
+    .how-card-inner {
+      position: relative;
+      z-index: 2;
+      padding: 26px;
+      min-height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .how-card-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      width: fit-content;
+      font-size: 0.92rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .how-card-badge svg {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+    }
+
+    .how-title {
+      margin-top: 22px;
+      font-size: clamp(1.7rem, 2vw, 2.1rem);
+      line-height: 1.08;
+      font-weight: 800;
+      letter-spacing: -0.05em;
+    }
+
+    .how-copy {
+      margin-top: 14px;
+      font-size: 1rem;
+      line-height: 1.6;
+      max-width: 40ch;
+      flex: 1 1 auto;
+    }
+
+    .how-link {
+      margin-top: 22px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      width: fit-content;
+      padding: 12px 18px;
+      border-radius: 9999px;
+      background: rgba(255,255,255,0.88);
+      font-size: 0.95rem;
+      font-weight: 700;
+      text-decoration: none;
+      transition: transform 160ms ease, background-color 160ms ease, gap 160ms ease;
+      box-shadow: 0 1px 0 rgba(255,255,255,0.7) inset;
+    }
+
+    .how-link:hover {
+      transform: translateY(-1px);
+      gap: 10px;
+    }
+
+    .how-link-arrow {
+      font-size: 1.15rem;
+      line-height: 1;
+    }
+
+    .how-card-bg {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      pointer-events: none;
+      overflow: hidden;
+      opacity: 0.9;
+    }
+
+    .how-card--lavender {
+      background: linear-gradient(135deg, rgba(245,241,255,0.95) 0%, rgba(236,233,255,0.92) 100%);
+      border: 1px solid rgba(224,216,255,0.95);
+      box-shadow: 0 10px 30px rgba(124,58,237,0.08), 0 24px 70px rgba(15,23,42,0.05);
+      color: #6d28d9;
+    }
+    .how-card--lavender .how-copy { color: rgba(109,40,217,0.82); }
+    .how-card--lavender .how-link { color: #6d28d9; }
+    .how-card--lavender .how-link:hover { background: rgba(255,255,255,0.98); }
+
+    .how-card--mint {
+      background: linear-gradient(135deg, rgba(237,252,247,0.96) 0%, rgba(228,248,241,0.92) 100%);
+      border: 1px solid rgba(195,239,224,0.95);
+      box-shadow: 0 10px 30px rgba(16,185,129,0.08), 0 24px 70px rgba(15,23,42,0.05);
+      color: #059669;
+    }
+    .how-card--mint .how-copy { color: rgba(5,150,105,0.84); }
+    .how-card--mint .how-link { color: #059669; }
+    .how-card--mint .how-link:hover { background: rgba(255,255,255,0.98); }
+
+    .how-card--peach {
+      background: linear-gradient(135deg, rgba(255,246,241,0.96) 0%, rgba(255,239,232,0.92) 100%);
+      border: 1px solid rgba(255,219,202,0.95);
+      box-shadow: 0 10px 30px rgba(249,115,22,0.08), 0 24px 70px rgba(15,23,42,0.05);
+      color: #ea580c;
+    }
+    .how-card--peach .how-copy { color: rgba(234,88,12,0.84); }
+    .how-card--peach .how-link { color: #ea580c; }
+    .how-card--peach .how-link:hover { background: rgba(255,255,255,0.98); }
+
+    .how-card--pink {
+      background: linear-gradient(135deg, rgba(254,240,249,0.96) 0%, rgba(252,231,243,0.92) 100%);
+      border: 1px solid rgba(250,210,231,0.95);
+      box-shadow: 0 10px 30px rgba(236,72,153,0.08), 0 24px 70px rgba(15,23,42,0.05);
+      color: #db2777;
+    }
+    .how-card--pink .how-copy { color: rgba(219,39,119,0.84); }
+    .how-card--pink .how-link { color: #db2777; }
+    .how-card--pink .how-link:hover { background: rgba(255,255,255,0.98); }
+
+    .stream-list {
+      margin-top: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .stream-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      padding: 12px;
+      border-radius: 18px;
+      background: rgba(255,255,255,0.72);
+      border: 1px solid rgba(255,255,255,0.88);
+      box-shadow: 0 4px 14px rgba(15,23,42,0.04), inset 0 1px 0 rgba(255,255,255,0.7);
+    }
+
+    .stream-chain-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 9999px;
+      overflow: hidden;
+      flex-shrink: 0;
+      background: rgba(255,255,255,0.9);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid rgba(255,255,255,0.95);
+      font-size: 0.82rem;
+      font-weight: 800;
+    }
+
+    .stream-chain-icon img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .stream-chain-meta {
+      min-width: 0;
+      flex: 1;
+    }
+
+    .stream-chain-name {
+      font-size: 0.92rem;
+      font-weight: 700;
+      line-height: 1.2;
+      color: currentColor;
+    }
+
+    .stream-chain-url {
+      margin-top: 2px;
+      font-size: 0.8rem;
+      line-height: 1.3;
+      opacity: 0.82;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .stream-copy-button {
+      width: 38px;
+      height: 38px;
+      border: 0;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.9);
+      color: currentColor;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: transform 160ms ease, background-color 160ms ease, opacity 160ms ease;
+      box-shadow: 0 1px 0 rgba(255,255,255,0.7) inset;
+    }
+
+    .stream-copy-button:hover {
+      transform: translateY(-1px);
+      background: rgba(255,255,255,1);
+    }
+
+    .stream-copy-button:active {
+      transform: translateY(0);
+    }
+
+    .stream-copy-button svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .stream-copy-button.copied {
+      opacity: 0.82;
+    }
+
+    .connect-button {
+      background: rgba(255,255,255,0.74);
+      color: #0f172a;
+      border: 1px solid rgba(255,255,255,0.9);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      box-shadow:
+        0 8px 20px rgba(15,23,42,0.06),
+        inset 0 1px 0 rgba(255,255,255,0.7);
+    }
+
+    .connect-button:hover {
+      background: rgba(255,255,255,0.9);
+    }
+
+    .primary-button {
+      background: linear-gradient(180deg, var(--brand-1) 0%, var(--brand-2) 100%);
+      box-shadow:
+        0 10px 24px var(--brand-shadow),
+        0 2px 6px rgba(0,0,0,0.06);
+    }
+
+    .primary-button:hover {
+      box-shadow:
+        0 14px 30px rgba(14,165,233,0.32),
+        0 2px 8px rgba(0,0,0,0.06);
+    }
+
+    /* Card 2 background */
+    .repo-bg-grid {
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(15,23,42,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(15,23,42,0.04) 1px, transparent 1px);
+      background-size: 28px 28px;
+      mask-image: linear-gradient(to bottom right, rgba(0,0,0,0.4), transparent 78%);
+      -webkit-mask-image: linear-gradient(to bottom right, rgba(0,0,0,0.4), transparent 78%);
+    }
+
+    .repo-bg-logo {
+      position: absolute;
+      right: -12px;
+      bottom: -20px;
+      width: 210px;
+      height: 210px;
+      opacity: 0.11;
+      animation: softFloat 6s ease-in-out infinite;
+    }
+
+    /* Card 3 background */
+    .client-bg-shell {
+      position: absolute;
+      right: 18px;
+      top: 18px;
+      width: 42%;
+      min-width: 150px;
+      max-width: 210px;
+      height: 112px;
+      border-radius: 22px;
+      background: rgba(255,255,255,0.10);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+      overflow: hidden;
+      opacity: 0.72;
+    }
+
+    .client-bg-shell::before {
+      content: "";
+      position: absolute;
+      left: 14px;
+      right: 14px;
+      top: 18px;
+      height: 1px;
+      background: rgba(234,88,12,0.06);
+      box-shadow:
+        0 18px 0 rgba(234,88,12,0.06),
+        0 36px 0 rgba(234,88,12,0.06),
+        0 54px 0 rgba(234,88,12,0.06);
+    }
+
+    .client-bg-shell::after {
+      content: "";
+      position: absolute;
+      inset: 16px 16px auto auto;
+      width: 56px;
+      height: 56px;
+      border-radius: 16px;
+      background:
+        radial-gradient(circle at 30% 30%, rgba(234,88,12,0.12), transparent 35%),
+        linear-gradient(180deg, rgba(234,88,12,0.05), rgba(234,88,12,0.02));
+      opacity: 0.7;
+    }
+
+    /* Card 4 background */
+    .block-bg {
+      position: absolute;
+      right: 18px;
+      bottom: 16px;
+      width: 46%;
+      min-width: 170px;
+      max-width: 230px;
+      height: 128px;
+      border-radius: 20px;
+      background: rgba(255,255,255,0.10);
+      overflow: hidden;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+      opacity: 0.64;
+    }
+
+    .block-bg-list {
+      position: absolute;
+      inset: 14px 14px auto 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      font-size: 0.76rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: rgba(219,39,119,0.16);
+    }
+
+    .block-bg-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      white-space: nowrap;
+    }
+
+    .block-bg-row span:last-child {
+      opacity: 0.58;
+    }
+
+    .coverage-shell {
+      position: relative;
+      border-top: 1px solid rgba(15,23,42,0.08);
+      border-bottom: 1px solid rgba(15,23,42,0.08);
+      padding: 36px 0;
+    }
+
+    .coverage-row {
+      display: grid;
+      grid-template-columns: 220px minmax(0, 1fr);
+      gap: 24px;
+      align-items: start;
+      padding: 20px 0;
+      border-bottom: 1px solid rgba(15,23,42,0.08);
+    }
+
+    .coverage-row:last-child {
+      border-bottom: 0;
+    }
+
+    .coverage-label {
+      font-size: 1.35rem;
+      line-height: 1.15;
+      font-weight: 700;
+      letter-spacing: -0.04em;
+      color: #0f172a;
+    }
+
+    .coverage-copy {
+      font-size: 1rem;
+      line-height: 1.7;
+      color: #4b5563;
+      max-width: 56ch;
+    }
+
+    .resource-list {
+      border-top: 1px solid rgba(15,23,42,0.08);
+    }
+
+    .resource-row {
+      display: grid;
+      grid-template-columns: 220px minmax(0, 1fr) auto;
+      gap: 24px;
+      align-items: center;
+      padding: 22px 0;
+      border-bottom: 1px solid rgba(15,23,42,0.08);
+      text-decoration: none;
+      color: inherit;
+      transition: opacity 160ms ease;
+    }
+
+    .resource-row:hover {
+      opacity: 0.78;
+    }
+
+    .resource-title {
+      font-size: 1.25rem;
+      line-height: 1.15;
+      font-weight: 700;
+      letter-spacing: -0.04em;
+      color: #0f172a;
+    }
+
+    .resource-desc {
+      font-size: 1rem;
+      line-height: 1.6;
+      color: #4b5563;
+      max-width: 58ch;
+    }
+
+    .resource-arrow {
+      font-size: 1.8rem;
+      line-height: 1;
+      color: #0f172a;
+    }
+
+    .site-footer {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 24px;
+      align-items: end;
+      padding-top: 26px;
+      color: #6b7280;
+      font-size: 0.92rem;
+    }
+
+    .footer-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 18px;
+      justify-content: flex-end;
+    }
+
+    .footer-links a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .footer-links a:hover {
+      color: #0f172a;
+    }
+
+    @media (min-width: 1024px) {
+      .how-card-inner {
+        padding: 28px;
       }
+    }
+
+    @media (max-width: 1024px) {
+      .swap-card { max-width: 520px; }
     }
 
     @media (max-width: 768px) {
@@ -592,38 +1043,45 @@
         right: -90px;
         top: 280px;
       }
+
+      .coverage-row,
+      .resource-row {
+        grid-template-columns: 1fr;
+        gap: 10px;
+      }
+
+      .resource-arrow {
+        display: none;
+      }
+
+      .site-footer {
+        grid-template-columns: 1fr;
+        align-items: start;
+      }
+
+      .footer-links {
+        justify-content: flex-start;
+      }
     }
 
     @media (max-width: 640px) {
-      .page-glow::before {
-        animation-duration: 24s;
-      }
-
-      .page-glow::after {
-        animation-duration: 28s;
-      }
+      .page-glow::before { animation-duration: 24s; }
+      .page-glow::after { animation-duration: 28s; }
 
       .swap-card {
         max-width: 100%;
         border-radius: 24px;
       }
 
-      .swap-card-inner {
-        padding: 12px;
-      }
+      .swap-card-inner { padding: 12px; }
 
       .swap-pane {
         border-radius: 20px;
         padding: 12px 12px 11px;
       }
 
-      .pane-label-row {
-        margin-bottom: 10px;
-      }
-
-      .pane-label {
-        font-size: 0.88rem;
-      }
+      .pane-label-row { margin-bottom: 10px; }
+      .pane-label { font-size: 0.88rem; }
 
       .pane-balance {
         max-width: 58%;
@@ -640,9 +1098,7 @@
         min-width: 0;
       }
 
-      .amount-input {
-        font-size: clamp(2rem, 10vw, 2.5rem);
-      }
+      .amount-input { font-size: clamp(2rem, 10vw, 2.5rem); }
 
       .token-pill-wrap {
         flex: 0 0 auto;
@@ -657,13 +1113,8 @@
         gap: 8px;
       }
 
-      .token-trigger-left {
-        gap: 8px;
-      }
-
-      .token-symbol-text {
-        font-size: 0.92rem;
-      }
+      .token-trigger-left { gap: 8px; }
+      .token-symbol-text { font-size: 0.92rem; }
 
       .token-icon {
         width: 26px;
@@ -676,9 +1127,7 @@
         margin-left: 2px;
       }
 
-      .swap-middle {
-        height: 16px;
-      }
+      .swap-middle { height: 16px; }
 
       .flip-button {
         width: 42px;
@@ -707,17 +1156,9 @@
         border-bottom: 0;
       }
 
-      .token-modal-header {
-        padding: 16px 16px 10px;
-      }
-
-      .token-modal-title {
-        font-size: 1.2rem;
-      }
-
-      .token-modal-body {
-        padding: 0 16px 16px;
-      }
+      .token-modal-header { padding: 16px 16px 10px; }
+      .token-modal-title { font-size: 1.2rem; }
+      .token-modal-body { padding: 0 16px 16px; }
 
       .token-search-input {
         font-size: 0.96rem;
@@ -725,13 +1166,73 @@
         padding-bottom: 13px;
       }
 
-      .token-row {
-        padding: 12px 4px;
-      }
+      .token-row { padding: 12px 4px; }
 
       .token-row-icon {
         width: 40px;
         height: 40px;
+      }
+
+      .how-card {
+        border-radius: 24px;
+      }
+
+      .how-card-inner {
+        padding: 18px;
+      }
+
+      .how-title {
+        margin-top: 18px;
+        font-size: 1.45rem;
+      }
+
+      .how-copy {
+        font-size: 0.92rem;
+        line-height: 1.65;
+        max-width: none;
+      }
+
+      .how-link { font-size: 0.9rem; }
+
+      .repo-bg-logo {
+        width: 150px;
+        height: 150px;
+        right: -8px;
+        bottom: -10px;
+      }
+
+      .client-bg-shell {
+        width: 52%;
+        top: 16px;
+        right: 14px;
+      }
+
+      .block-bg {
+        width: 52%;
+        right: 14px;
+        bottom: 14px;
+      }
+
+      .coverage-shell {
+        padding: 26px 0;
+      }
+
+      .coverage-row {
+        padding: 16px 0;
+      }
+
+      .resource-row {
+        padding: 18px 0;
+      }
+
+      .coverage-label,
+      .resource-title {
+        font-size: 1.1rem;
+      }
+
+      .coverage-copy,
+      .resource-desc {
+        font-size: 0.95rem;
       }
     }
 
@@ -748,39 +1249,24 @@
         display: none;
       }
 
-      .swap-card {
-        border-radius: 22px;
-      }
-
-      .swap-card-inner {
-        padding: 10px;
-      }
+      .swap-card { border-radius: 22px; }
+      .swap-card-inner { padding: 10px; }
 
       .swap-pane {
         border-radius: 18px;
         padding: 11px 11px 10px;
       }
 
-      .pane-label-row {
-        gap: 8px;
-      }
-
-      .pane-label {
-        font-size: 0.84rem;
-      }
+      .pane-label-row { gap: 8px; }
+      .pane-label { font-size: 0.84rem; }
 
       .pane-balance {
         font-size: 0.7rem;
         max-width: 62%;
       }
 
-      .pane-main {
-        gap: 8px;
-      }
-
-      .amount-input {
-        font-size: clamp(1.75rem, 10.8vw, 2.15rem);
-      }
+      .pane-main { gap: 8px; }
+      .amount-input { font-size: clamp(1.75rem, 10.8vw, 2.15rem); }
 
       .token-pill-wrap {
         max-width: 48%;
@@ -798,13 +1284,8 @@
         font-size: 0.62rem;
       }
 
-      .token-symbol-text {
-        font-size: 0.86rem;
-      }
-
-      .token-chevron {
-        font-size: 0.78rem;
-      }
+      .token-symbol-text { font-size: 0.86rem; }
+      .token-chevron { font-size: 0.78rem; }
 
       .flip-button {
         width: 40px;
@@ -819,17 +1300,9 @@
         font-size: 0.94rem;
       }
 
-      .token-modal-header {
-        padding: 14px 14px 10px;
-      }
-
-      .token-modal-body {
-        padding: 0 14px 14px;
-      }
-
-      .token-search-input {
-        border-radius: 16px;
-      }
+      .token-modal-header { padding: 14px 14px 10px; }
+      .token-modal-body { padding: 0 14px 14px; }
+      .token-search-input { border-radius: 16px; }
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -837,7 +1310,13 @@
       .page-glow::after,
       .token-trigger,
       .flip-button,
-      .swap-button {
+      .swap-button,
+      .how-card,
+      .how-link,
+      .stream-copy-button,
+      .connect-button,
+      .primary-button,
+      .repo-bg-logo {
         animation: none !important;
         transition: none !important;
       }
@@ -846,15 +1325,15 @@
 </head>
 <body class="text-slate-900 antialiased min-h-screen flex flex-col">
   <div class="relative flex-1 flex flex-col overflow-hidden hero-bg page-glow">
-    <div class="relative z-10 flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-5 sm:pt-8 md:pt-14 pb-10 sm:pb-16 md:pb-24 flex flex-col">
+    <div class="relative z-10 flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-5 sm:pt-8 md:pt-14 pb-14 sm:pb-20 md:pb-24 flex flex-col">
       <header class="flex items-center justify-between gap-3 sm:gap-6 mb-8 sm:mb-10 md:mb-16">
         <div class="flex items-center gap-2 sm:gap-3 min-w-0">
           <img
-            src="/defistate_hex_logo.svg"
+            src="/public/defistate_hex_logo.svg"
             onerror="this.style.display='none'"
             alt="DeFiState"
             class="h-9 sm:h-11 md:h-12 w-auto drop-shadow-sm shrink-0"
-          >
+          />
           <span class="text-lg sm:text-2xl md:text-3xl font-extrabold tracking-tight text-slate-950 truncate">
             DeFiState
           </span>
@@ -863,30 +1342,44 @@
         <button
           id="connectWalletButton"
           type="button"
-          class="inline-flex items-center justify-center px-3.5 sm:px-5 py-2.5 sm:py-3 rounded-2xl bg-slate-950 text-white text-xs sm:text-sm font-semibold hover:bg-slate-800 transition-colors shadow-lg shadow-slate-900/10 shrink-0"
+          class="connect-button inline-flex items-center justify-center px-3.5 sm:px-5 py-2.5 sm:py-3 rounded-2xl text-xs sm:text-sm font-semibold transition-colors shrink-0"
         >
           Connect Wallet
         </button>
       </header>
 
-      <div class="grid grid-cols-1 lg:grid-cols-[1.08fr_0.92fr] gap-8 sm:gap-10 md:gap-12 lg:gap-14 items-start lg:items-center">
+      <div class="grid grid-cols-1 lg:grid-cols-[1.06fr_0.94fr] gap-8 sm:gap-10 md:gap-12 lg:gap-14 items-start lg:items-center">
         <section class="order-2 lg:order-1">
-          <div class="text-[11px] sm:text-xs font-bold uppercase section-kicker mb-3 sm:mb-4">
-            On Katana
-          </div>
-
-          <h1 class="text-2xl sm:text-3xl md:text-5xl lg:text-6xl xl:text-7xl font-extrabold tracking-tight leading-[1.02] text-slate-950 max-w-4xl">
-            Build applications with <span class="text-slate-950">DeFiState</span>.
+          <h1 class="max-w-4xl text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-extrabold tracking-tight leading-[1.08] text-slate-950">
+            Build DeFi applications with DeFiState.
           </h1>
 
-          <p class="mt-4 sm:mt-5 md:mt-6 max-w-2xl text-sm sm:text-base md:text-lg lg:text-xl leading-relaxed text-slate-600">
-            Access DeFi data on every block across EVM chains, powering interfaces like this swap.
-          </p>
-
+         <p class="mt-4 sm:mt-5 max-w-xl text-sm sm:text-base md:text-lg leading-7 text-slate-600">
+          This
+          <a
+            href="https://katana.network"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="font-medium text-slate-900 hover:text-sky-600 transition-colors"
+          >
+            Katana
+          </a>
+          swap interface is powered by DeFiState. The integration required only about
+          <a
+            href="https://github.com/defistate/defistate/blob/0f77671a475c40c8f862e3a8082173c3d3397541/examples/swap-platform/chains/katana/server/main.go#L73"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="font-medium text-sky-600 hover:text-sky-500 transition-colors"
+          >
+            10 lines of code
+          </a>.
+        </p>
           <div class="mt-6 sm:mt-8 flex flex-col sm:flex-row gap-3 sm:gap-4">
             <a
-              href="mailto:tobi@defistate.io"
-              class="inline-flex w-full sm:w-auto items-center justify-center gap-2 px-5 sm:px-6 py-3 sm:py-3.5 rounded-2xl bg-[#65c6f7] text-white text-sm sm:text-base font-semibold tracking-tight hover:-translate-y-[1px] transition-all duration-200 shadow-[0_8px_20px_rgba(101,198,247,0.35),0_2px_6px_rgba(0,0,0,0.08)]"
+              href="https://github.com/defistate/defistate"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="primary-button inline-flex w-full sm:w-auto items-center justify-center gap-2 px-5 sm:px-6 py-3 sm:py-3.5 rounded-2xl text-white text-sm sm:text-base font-semibold tracking-tight hover:-translate-y-[1px] transition-all duration-200"
             >
               Start Building
               <span class="text-lg leading-none">→</span>
@@ -925,7 +1418,7 @@
                     >
                       <span class="token-trigger-left">
                         <span class="token-icon" id="tokenInIcon">
-                          <img src="/token-default.svg" alt="" />
+                          <img src="/public/token-default.svg" alt="" />
                         </span>
                         <span class="token-symbol-text" id="tokenInLabel">Select token</span>
                       </span>
@@ -976,7 +1469,7 @@
                     >
                       <span class="token-trigger-left">
                         <span class="token-icon" id="tokenOutIcon">
-                          <img src="/token-default.svg" alt="" />
+                          <img src="/public/token-default.svg" alt="" />
                         </span>
                         <span class="token-symbol-text" id="tokenOutLabel">Select token</span>
                       </span>
@@ -1002,6 +1495,282 @@
           </div>
         </section>
       </div>
+
+      <section class="relative z-10 mt-20 sm:mt-24 md:mt-28 lg:mt-32">
+        <div class="max-w-6xl mx-auto">
+          <div class="text-center max-w-3xl mx-auto">
+            <h2 class="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-extrabold tracking-tight leading-[1.05] text-slate-950">
+              Build with DeFiState in four steps
+            </h2>
+
+            <p class="mt-4 text-sm sm:text-base md:text-lg leading-7 text-slate-600">
+              Connect to the stream, run the client, and receive block-synced DeFi data.
+            </p>
+          </div>
+
+          <div class="mt-10 sm:mt-12 grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5 lg:gap-6">
+            <article class="how-card how-card--lavender">
+              <div class="how-card-inner">
+                <div class="how-card-badge">
+                  <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                    <path d="M10 2 3.5 10h4.3L6.7 18 16.5 7.8h-4.2L10 2Z"></path>
+                  </svg>
+                  <span>Chain Streams</span>
+                </div>
+
+                <h3 class="how-title">Get the stream URL.</h3>
+
+                <p class="how-copy">
+                  Choose a DeFiState stream endpoint for your chain and connect your client to consume block-synced protocol data.
+                </p>
+
+                <div class="stream-list">
+                  <div class="stream-row">
+                    <div class="stream-chain-icon">
+                      <img src="/public/ethereum-logo.png" alt="Ethereum" onerror="this.parentNode.textContent='E'" />
+                    </div>
+
+                    <div class="stream-chain-meta">
+                      <div class="stream-chain-name">Ethereum</div>
+                      <div class="stream-chain-url">wss://eth.defistate.io</div>
+                    </div>
+
+                    <button
+                      type="button"
+                      class="stream-copy-button"
+                      data-copy="wss://eth.defistate.io"
+                      aria-label="Copy Ethereum stream URL"
+                      title="Copy stream URL"
+                    >
+                      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                        <rect x="7" y="7" width="9" height="9" rx="2"></rect>
+                        <path d="M5 13H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v1"></path>
+                      </svg>
+                    </button>
+                  </div>
+
+                  <div class="stream-row">
+                    <div class="stream-chain-icon">
+                      <img src="/public/katana-logo.svg" alt="Katana" onerror="this.parentNode.textContent='K'" />
+                    </div>
+
+                    <div class="stream-chain-meta">
+                      <div class="stream-chain-name">Katana</div>
+                      <div class="stream-chain-url">wss://katana.defistate.io</div>
+                    </div>
+
+                    <button
+                      type="button"
+                      class="stream-copy-button"
+                      data-copy="wss://katana.defistate.io"
+                      aria-label="Copy Katana stream URL"
+                      title="Copy stream URL"
+                    >
+                      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                        <rect x="7" y="7" width="9" height="9" rx="2"></rect>
+                        <path d="M5 13H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v1"></path>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </article>
+
+            <article class="how-card how-card--mint">
+              <div class="how-card-bg" aria-hidden="true">
+                <div class="repo-bg-grid"></div>
+                <img
+                  src="/public/defistate_hex_logo_2.svg"
+                  alt=""
+                  class="repo-bg-logo"
+                  onerror="this.style.display='none'"
+                />
+              </div>
+
+              <div class="how-card-inner">
+                <div class="how-card-badge">
+                  <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                    <path d="M4 4h12v2H4V4Zm0 4h12v8H4V8Zm2 2v4h8v-4H6Z"></path>
+                  </svg>
+                  <span>Repository</span>
+                </div>
+
+                <h3 class="how-title">Clone the repo.</h3>
+
+                <p class="how-copy">
+                  Clone the DeFiState repository to bootstrap your application with a working integration.
+                </p>
+
+                <a
+                  href="https://github.com/defistate/defistate"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="how-link"
+                >
+                  Open GitHub
+                  <span class="how-link-arrow">→</span>
+                </a>
+              </div>
+            </article>
+
+            <article class="how-card how-card--peach">
+              <div class="how-card-bg" aria-hidden="true">
+                <div class="client-bg-shell"></div>
+              </div>
+
+              <div class="how-card-inner">
+                <div class="how-card-badge">
+                  <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                    <path d="M4 4h12v3H4V4Zm0 5h12v7H4V9Zm2 2v3h3v-3H6Z"></path>
+                  </svg>
+                  <span>Client</span>
+                </div>
+
+                <h3 class="how-title">Run the client.</h3>
+
+                <p class="how-copy">
+                  Start the DeFiState client and connect it to the stream for your selected chain.
+                </p>
+
+                <a
+                  href="https://github.com/defistate/defistate/tree/master/clients/chains"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="how-link"
+                >
+                  Client setup
+                  <span class="how-link-arrow">→</span>
+                </a>
+              </div>
+            </article>
+
+            <article class="how-card how-card--pink">
+              <div class="how-card-bg" aria-hidden="true">
+                <div class="block-bg">
+                  <div class="block-bg-list">
+                    <div class="block-bg-row"><span>Block 23190482</span><span>synced</span></div>
+                    <div class="block-bg-row"><span>Block 23190483</span><span>synced</span></div>
+                    <div class="block-bg-row"><span>Block 23190484</span><span>synced</span></div>
+                    <div class="block-bg-row"><span>Block 23190485</span><span>synced</span></div>
+                    <div class="block-bg-row"><span>Block 23190486</span><span>synced</span></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="how-card-inner">
+                <div class="how-card-badge">
+                  <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                    <path d="M5 4h10v2H5V4Zm0 4h10v2H5V8Zm0 4h6v2H5v-2Z"></path>
+                  </svg>
+                  <span>OnNewBlock</span>
+                </div>
+
+                <h3 class="how-title">Consume each block.</h3>
+
+                <p class="how-copy">
+                  Connect
+                  <code class="rounded bg-white/80 px-1.5 py-0.5 text-[12px] font-semibold">OnNewBlock</code>
+                  to your application and process synchronized DeFi state as blocks arrive.
+                </p>
+
+                <a
+                  href="https://github.com/defistate/defistate/blob/0f77671a475c40c8f862e3a8082173c3d3397541/README.md#example"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="how-link"
+                >
+                  View example
+                  <span class="how-link-arrow">→</span>
+                </a>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="relative z-10 mt-20 sm:mt-24 md:mt-28">
+        <div class="max-w-6xl mx-auto">
+          <div class="text-center max-w-3xl mx-auto">
+            <h2 class="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-extrabold tracking-tight leading-[1.05] text-slate-950">
+              Supported protocols
+            </h2>
+
+            <p class="mt-4 text-sm sm:text-base md:text-lg leading-7 text-slate-600">
+              DeFiState currently supports Uniswap, PancakeSwap, and SushiSwap across EVM chains.
+            </p>
+          </div>
+
+          <div class="mt-10 sm:mt-12 coverage-shell">
+            <div class="coverage-row">
+              <div class="coverage-label">Protocols</div>
+              <div class="coverage-copy">
+                Uniswap, PancakeSwap, and SushiSwap are currently supported across EVM deployments.
+              </div>
+            </div>
+
+            <div class="coverage-row">
+              <div class="coverage-label">Data delivery</div>
+              <div class="coverage-copy">
+                Applications receive synchronized DeFi protocol state on every block through the DeFiState stream and client.
+              </div>
+            </div>
+
+            <div class="coverage-row">
+              <div class="coverage-label">Use cases</div>
+              <div class="coverage-copy">
+                Power swap interfaces, routing systems, analytics surfaces, market monitoring, and other block-aware DeFi applications with a single integration model.
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="relative z-10 mt-20 sm:mt-24 md:mt-28 pb-4">
+        <div class="max-w-6xl mx-auto">
+          <div class="resource-list">
+            <a
+              href="https://github.com/defistate/defistate"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="resource-row"
+            >
+              <div class="resource-title">GitHub</div>
+              <div class="resource-desc">Explore the repository and start building with DeFiState.</div>
+              <div class="resource-arrow">↗</div>
+            </a>
+
+            <a
+              href="https://github.com/defistate/defistate/blob/master/README.md"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="resource-row"
+            >
+              <div class="resource-title">Docs</div>
+              <div class="resource-desc">Set up the DeFiState client and connect it to your chain stream.</div>
+              <div class="resource-arrow">↗</div>
+            </a>
+
+            <a
+              href="mailto:info@defistate.io"
+              class="resource-row"
+            >
+              <div class="resource-title">Contact us</div>
+              <div class="resource-desc">Reach out for integrations, supported chains, or product questions.</div>
+              <div class="resource-arrow">↗</div>
+            </a>
+          </div>
+
+          <div class="site-footer">
+            <div>© 2026 DeFiState</div>
+            <div class="footer-links">
+              <a href="wss://eth.defistate.io" target="_blank" rel="noopener noreferrer">Ethereum stream</a>
+              <a href="wss://katana.defistate.io" target="_blank" rel="noopener noreferrer">Katana stream</a>
+              <a href="https://github.com/defistate/defistate" target="_blank" rel="noopener noreferrer">Repository</a>
+              <a href="mailto:info@defistate.io">info@defistate.io</a>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
   </div>
 
@@ -1044,6 +1813,33 @@
       </div>
     </div>
   </div>
+
+  <script>
+    document.addEventListener("click", async (event) => {
+      const button = event.target.closest(".stream-copy-button");
+      if (!button) return;
+
+      const value = button.getAttribute("data-copy");
+      if (!value) return;
+
+      try {
+        await navigator.clipboard.writeText(value);
+        const originalLabel = button.getAttribute("aria-label");
+
+        button.classList.add("copied");
+        button.setAttribute("aria-label", "Copied");
+        button.setAttribute("title", "Copied");
+
+        setTimeout(() => {
+          button.classList.remove("copied");
+          button.setAttribute("aria-label", originalLabel || "Copy stream URL");
+          button.setAttribute("title", "Copy stream URL");
+        }, 1200);
+      } catch (err) {
+        console.error("Failed to copy stream URL", err);
+      }
+    });
+  </script>
 
   <script src="app.js?v=2"></script>
 </body>
