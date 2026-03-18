@@ -79,6 +79,11 @@ function clearButtonOverride() {
   buttonMessageOverride = "";
 }
 
+function setSwapButtonDangerState(isDanger) {
+  if (!elements.swapButton) return;
+  elements.swapButton.classList.toggle("swap-button-danger", !!isDanger);
+}
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -280,18 +285,21 @@ function updateSwapButtonState() {
 function updateSwapButtonStateWithBalanceCheck() {
   if (isSwapExecuting) {
     elements.swapButton.disabled = true;
+    setSwapButtonDangerState(false);
     return;
   }
 
   if (buttonMessageOverride) {
     elements.swapButton.disabled = true;
     elements.swapButton.textContent = buttonMessageOverride;
+    setSwapButtonDangerState(false);
     return;
   }
 
   if (!walletState.connected) {
     elements.swapButton.disabled = true;
     elements.swapButton.textContent = "Connect";
+    setSwapButtonDangerState(false);
     return;
   }
 
@@ -302,18 +310,21 @@ function updateSwapButtonStateWithBalanceCheck() {
   if (!tokenIn || !tokenOut) {
     elements.swapButton.disabled = true;
     elements.swapButton.textContent = "Select Tokens";
+    setSwapButtonDangerState(false);
     return;
   }
 
   if (isSameToken()) {
     elements.swapButton.disabled = true;
     elements.swapButton.textContent = "Select Different Tokens";
+    setSwapButtonDangerState(false);
     return;
   }
 
   if (!amount) {
     elements.swapButton.disabled = true;
     elements.swapButton.textContent = "Enter Amount";
+    setSwapButtonDangerState(false);
     return;
   }
 
@@ -323,35 +334,41 @@ function updateSwapButtonStateWithBalanceCheck() {
   } catch {
     elements.swapButton.disabled = true;
     elements.swapButton.textContent = "Invalid Amount";
+    setSwapButtonDangerState(false);
     return;
   }
 
   if (amountRaw <= 0n) {
     elements.swapButton.disabled = true;
     elements.swapButton.textContent = "Enter Amount";
+    setSwapButtonDangerState(false);
     return;
   }
 
   if (amountRaw > currentBalanceInRaw) {
     elements.swapButton.disabled = true;
     elements.swapButton.textContent = `Insufficient ${getTokenSymbol(tokenIn)}`;
+    setSwapButtonDangerState(false);
     return;
   }
 
   if (!String(elements.amountOut.value || "").trim()) {
     elements.swapButton.disabled = true;
     elements.swapButton.textContent = "Loading Quote";
+    setSwapButtonDangerState(false);
     return;
   }
 
   if (typeof currentPriceImpact === "number" && currentPriceImpact >= MAX_ALLOWED_PRICE_IMPACT) {
-    elements.swapButton.disabled = true;
-    elements.swapButton.textContent = "Price Impact Too High";
+    elements.swapButton.disabled = false;
+    elements.swapButton.textContent = "High Price Impact";
+    setSwapButtonDangerState(true);
     return;
   }
 
   elements.swapButton.disabled = false;
   elements.swapButton.textContent = "Swap";
+  setSwapButtonDangerState(false);
 }
 
 function resetDisplayedBalances() {
@@ -940,6 +957,7 @@ async function loadTokens() {
     console.error("failed to load tokens:", error);
     setButtonOverride("Unavailable");
     elements.swapButton.disabled = true;
+    setSwapButtonDangerState(false);
   }
 }
 
@@ -1063,6 +1081,7 @@ async function executeSwapPlan() {
   isSwapExecuting = true;
   elements.swapButton.disabled = true;
   elements.swapButton.textContent = "Building...";
+  setSwapButtonDangerState(false);
 
   try {
     const params = new URLSearchParams({
