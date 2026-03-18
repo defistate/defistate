@@ -2,7 +2,9 @@ const NATIVE_TOKEN_PLACEHOLDERS = new Set([
   "0x0000000000000000000000000000000000000000",
   "native",
 ]);
-
+const DEFAULT_TOKEN_IN = "0xee7d8bcfb72bc1880d0cf19822eb0a2e6577ab62";
+const DEFAULT_TOKEN_OUT = "0x0913da6da4b42f538b445599b46bb4622342cf52";
+const DEFAULT_AMOUNT_IN = "1";
 const SUSHI_TOKEN_LOGO_BASE =
   "https://cdn.sushi.com/image/upload/f_auto,c_limit,w_32/d_unknown.png/tokens/747474";
 
@@ -239,18 +241,26 @@ function isSameToken() {
 }
 
 function loadTokenSelectors(tokens) {
-  const firstToken = tokens[0];
-  const secondToken = tokens[1] || tokens[0];
+  const values = tokens.map((token) => getTokenValue(token).toLowerCase());
 
-  const firstValue = firstToken ? getTokenValue(firstToken) : "";
-  const secondValue = secondToken ? getTokenValue(secondToken) : "";
+  const hasDefaultIn = values.includes(DEFAULT_TOKEN_IN.toLowerCase());
+  const hasDefaultOut = values.includes(DEFAULT_TOKEN_OUT.toLowerCase());
 
-  populateTokenSelect(elements.tokenIn, tokens, firstValue);
-  populateTokenSelect(elements.tokenOut, tokens, secondValue);
+  const fallbackIn = tokens[0] ? getTokenValue(tokens[0]) : "";
+  const fallbackOut = tokens[1] ? getTokenValue(tokens[1]) : fallbackIn;
 
-  if (tokens.length > 1 && firstValue === secondValue) {
-    elements.tokenOut.selectedIndex = 1;
+  const selectedIn = hasDefaultIn ? DEFAULT_TOKEN_IN : fallbackIn;
+  let selectedOut = hasDefaultOut ? DEFAULT_TOKEN_OUT : fallbackOut;
+
+  if (selectedIn.toLowerCase() === selectedOut.toLowerCase()) {
+    const alternative = tokens.find(
+      (token) => getTokenValue(token).toLowerCase() !== selectedIn.toLowerCase()
+    );
+    selectedOut = alternative ? getTokenValue(alternative) : selectedOut;
   }
+
+  populateTokenSelect(elements.tokenIn, tokens, selectedIn);
+  populateTokenSelect(elements.tokenOut, tokens, selectedOut);
 }
 
 function flipSelectedTokens() {
@@ -1541,6 +1551,11 @@ async function init() {
     loadTokens(),
     fetchPrices(),
   ]);
+
+  if (elements.amountIn && !String(elements.amountIn.value || "").trim()) {
+    elements.amountIn.value = DEFAULT_AMOUNT_IN;
+    dispatchElementEvents(elements.amountIn, ["input", "change"]);
+  }
 
   updateDisplayedTokenValues();
 }
