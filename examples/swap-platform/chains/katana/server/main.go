@@ -54,6 +54,14 @@ func main() {
 		return
 	}
 
+	platform := app.NewPlatform(
+		ctx,
+		big.NewInt(10_000_000), // 10 USDT (6 decimals)
+		common.HexToAddress("0x2dca96907fde857dd3d816880a0df407eeb2d2f2"),
+		common.HexToAddress("0x435f128E5E6E134C8C25Bf26F4C7b223B8F634Dd"),
+		ethClient,
+	)
+
 	client, err := katana.DialJSONRPCStream(
 		ctx,
 		katanaStreamURL,
@@ -64,11 +72,6 @@ func main() {
 		logger.Error("failed to init client", "error", err)
 		return
 	}
-
-	platform := app.NewPlatform(
-		ethClient,
-		common.HexToAddress("0x435f128E5E6E134C8C25Bf26F4C7b223B8F634Dd"),
-	)
 
 	client.OnNewBlock(func(ctx context.Context, s *katana.State) error {
 		return platform.SetState(s)
@@ -82,7 +85,7 @@ func main() {
 	mux.HandleFunc("GET /tokens", handleGetTokens(platform, logger))
 	mux.HandleFunc("GET /quote", handleQuote(platform, logger))
 	mux.HandleFunc("GET /swap", handleSwap(platform, logger))
-
+	mux.HandleFunc("GET /prices", handlePrices(platform, logger))
 	serverPort := os.Getenv("PORT")
 
 	server := &http.Server{
@@ -217,6 +220,35 @@ func handleSwap(p *app.Platform, l *slog.Logger) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(txs); err != nil {
 			l.Error("failed to encode txs", "error", err)
+		}
+	}
+}
+
+func handlePrices(p *app.Platform, l *slog.Logger) http.HandlerFunc {
+	type priceResponse struct {
+		QuoteToken string             `json:"quote_token"`
+		Prices     map[string]float64 `json:"prices"`
+	}
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		prices, quoteToken, err := p.Prices()
+		if err != nil {
+			l.Warn("failed to fetch prices", "error", err)
+			http.Error(w, "prices unavailable", http.StatusServiceUnavailable)
+			return
+		}
+
+		out := make(map[string]float64, len(prices))
+		for token, price := range prices {
+			out[token.Hex()] = price
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(priceResponse{
+			QuoteToken: quoteToken.Hex(),
+			Prices:     out,
+		}); err != nil {
+			l.Error("failed to encode prices response", "error", err)
 		}
 	}
 }

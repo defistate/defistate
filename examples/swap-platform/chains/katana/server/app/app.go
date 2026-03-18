@@ -1,10 +1,14 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"math"
 	"math/big"
+	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/defistate/defistate/clients/chains/katana"
 	ethclients "github.com/defistate/defistate/clients/eth-clients"
@@ -19,16 +23,89 @@ type Platform struct {
 	swapAddress common.Address
 	state       atomic.Pointer[katana.State]
 	router      atomic.Pointer[router.Router]
+
+	prices           map[common.Address]float64
+	quoteToken       common.Address
+	quoteTokenAmount *big.Int
+	mu               sync.RWMutex
 }
 
 func NewPlatform(
-	rpc ethclients.ETHClient,
+	ctx context.Context,
+	quoteTokenAmount *big.Int,
+	quoteToken common.Address,
 	swapAddress common.Address,
+	rpc ethclients.ETHClient,
 ) *Platform {
-	return &Platform{
-		rpc:         rpc,
-		swapAddress: swapAddress,
+	p := &Platform{
+		rpc:              rpc,
+		swapAddress:      swapAddress,
+		quoteToken:       quoteToken,
+		quoteTokenAmount: quoteTokenAmount,
+		prices:           make(map[common.Address]float64),
 	}
+
+	go p.loop(ctx, time.NewTicker(10*time.Second))
+
+	return p
+}
+
+func (p *Platform) loop(ctx context.Context, ticker *time.Ticker) {
+	for {
+		select {
+		case <-ticker.C:
+			p.updatePrices()
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func (p *Platform) updatePrices() error {
+	state := p.state.Load()
+	rt := p.router.Load()
+
+	if state == nil || rt == nil {
+		return errors.New("state unavailable")
+	}
+
+	quoteToken, ok := state.Tokens.GetByAddress(p.quoteToken)
+	if !ok {
+		return fmt.Errorf("quote token %s not found in state", p.quoteToken.Hex())
+	}
+
+	rates, err := rt.GetExchangeRates(
+		p.quoteTokenAmount,
+		quoteToken.ID,
+		4,
+		nil,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to get exchange rates: %w", err)
+	}
+
+	oneQuoteToken := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(quoteToken.Decimals)), nil)
+	prices := map[common.Address]float64{}
+	for tokenId, rate := range rates {
+		token, ok := state.Tokens.GetByID(tokenId)
+		if !ok {
+			//maybe warn
+			continue
+		}
+
+		// normalize rates by multiplying ( 10**base token decimal / baseAmountIn)
+		normalizedRate := new(big.Int).Set(rate)
+		normalizedRate.Mul(normalizedRate, oneQuoteToken)
+		normalizedRate.Div(normalizedRate, p.quoteTokenAmount)
+		normalizedRateF64, _ := normalizedRate.Float64()
+		prices[token.Address] = 1 / (normalizedRateF64 / (math.Pow(10, float64(token.Decimals))))
+	}
+
+	p.mu.Lock()
+	p.prices = prices
+	p.mu.Unlock()
+
+	return nil
 }
 
 func (p *Platform) SetState(state *katana.State) error {
@@ -64,6 +141,16 @@ func (p *Platform) Tokens() ([]token.TokenView, error) {
 	// tokens exist that are not routable
 	// return only routable tokens
 	return routable, nil
+}
+
+func (p *Platform) Prices() (prices map[common.Address]float64, quoteToken common.Address, err error) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	if p.prices == nil {
+		return nil, common.Address{}, errors.New("prices unavailable")
+	}
+	return p.prices, p.quoteToken, nil
 }
 
 func (p *Platform) Quote(
