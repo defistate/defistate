@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DeFiState — Katana Swap Demo</title>
+  <title>DeFiState — DeFi State Simplified</title>
 
   <script src="https://cdn.tailwindcss.com"></script>
 
@@ -1321,6 +1321,28 @@
         transition: none !important;
       }
     }
+  .code-snippet {
+    width: 100%;
+    max-width: 100%;
+    padding: 14px 16px;
+    margin: 16px 0 0 0;
+    border-radius: 12px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    overflow-x: auto;
+  }
+
+  .code-snippet code {
+    display: block;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: #0f172a;
+    
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
   </style>
 </head>
 <body class="text-slate-900 antialiased min-h-screen flex flex-col">
@@ -1351,39 +1373,14 @@
       <div class="grid grid-cols-1 lg:grid-cols-[1.06fr_0.94fr] gap-8 sm:gap-10 md:gap-12 lg:gap-14 items-start lg:items-center">
         <section class="order-2 lg:order-1">
           <h1 class="max-w-4xl text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-extrabold tracking-tight leading-[1.08] text-slate-950">
-            Build DeFi applications with DeFiState.
+            DeFi Simplified
           </h1>
 
          <p class="mt-4 sm:mt-5 max-w-xl text-sm sm:text-base md:text-lg leading-7 text-slate-600">
-          This
-          <a
-            href="https://katana.network"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="font-medium text-slate-900 hover:text-sky-600 transition-colors"
-          >
-            Katana
-          </a>
-          swap interface is powered by DeFiState. The integration required only about
-          <a
-            href="https://github.com/defistate/defistate/blob/0f77671a475c40c8f862e3a8082173c3d3397541/examples/swap-platform/chains/katana/server/main.go#L73"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="font-medium text-sky-600 hover:text-sky-500 transition-colors"
-          >
-            10 lines of code
-          </a>.
+          The backend for this swap interface stays in sync with the Katana blockchain in 3 lines of code:
         </p>
-          <div class="mt-6 sm:mt-8 flex flex-col sm:flex-row gap-3 sm:gap-4">
-            <a
-              href="https://github.com/defistate/defistate"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="primary-button inline-flex w-full sm:w-auto items-center justify-center gap-2 px-5 sm:px-6 py-3 sm:py-3.5 rounded-2xl text-white text-sm sm:text-base font-semibold tracking-tight hover:-translate-y-[1px] transition-all duration-200"
-            >
-              Start Building
-              <span class="text-lg leading-none">→</span>
-            </a>
+          <div class="code-snippet">
+            <code>client.OnNewBlock(func(ctx context.Context, s *chain.State) error {<br>&nbsp;&nbsp;&nbsp;&nbsp;return platform.SetState(s)<br>})</code>
           </div>
         </section>
 
@@ -1495,11 +1492,11 @@
         </section>
       </div>
 
-      <section class="relative z-10 mt-20 sm:mt-24 md:mt-28 lg:mt-32">
+      <section class="relative z-10 mt-20 sm:mt-16 md:mt-28 lg:mt-32">
         <div class="max-w-6xl mx-auto">
           <div class="text-center max-w-3xl mx-auto">
             <h2 class="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-extrabold tracking-tight leading-[1.05] text-slate-950">
-              Build with DeFiState in four steps
+              Build with DeFiState
             </h2>
 
             <p class="mt-4 text-sm sm:text-base md:text-lg leading-7 text-slate-600">
