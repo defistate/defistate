@@ -10,12 +10,15 @@ const DEFAULT_TOKEN_IMAGE = "/public/token-default.svg";
 
 const QUOTE_DEBOUNCE_MS = 200;
 const QUOTE_REFRESH_MS = 200;
+const PRICES_REFRESH_MS = 10000;
 
 const elements = {
   tokenIn: document.getElementById("tokenIn"),
   tokenOut: document.getElementById("tokenOut"),
   amountIn: document.getElementById("amountIn"),
   amountOut: document.getElementById("amountOut"),
+  amountInValue: document.getElementById("amountInValue"),
+  amountOutValue: document.getElementById("amountOutValue"),
   balanceIn: document.getElementById("balanceIn"),
   balanceOut: document.getElementById("balanceOut"),
   flipButton: document.getElementById("flipButton"),
@@ -44,6 +47,12 @@ let isQuoteFetching = false;
 let pendingQuoteRerun = false;
 let lastSettledQuote = "";
 let lastQuoteSignature = "";
+
+let pricesIntervalId = null;
+let pricesState = {
+  quoteToken: "",
+  prices: new Map(),
+};
 
 let isSwapExecuting = false;
 let buttonMessageOverride = "";
@@ -347,6 +356,7 @@ function resetQuoteDisplay() {
   lastSettledQuote = "";
   lastQuoteSignature = "";
   elements.amountOut.value = "";
+  updateDisplayedTokenValues();
 }
 
 function formatUnits(value, decimals = 18) {
@@ -387,6 +397,69 @@ function parseUnits(value, decimals = 18) {
   const paddedFraction = (fraction + "0".repeat(safeDecimals)).slice(0, safeDecimals);
 
   return BigInt(whole || "0") * 10n ** BigInt(safeDecimals) + BigInt(paddedFraction || "0");
+}
+
+function formatDollarValue(value) {
+  if (!Number.isFinite(value) || value <= 0) return "";
+
+  if (value >= 1000000) {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      notation: "compact",
+      maximumFractionDigits: 2,
+    }).format(value);
+  }
+
+  if (value >= 1) {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value);
+  }
+
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 6,
+  }).format(value);
+}
+
+function getTokenPrice(token) {
+  if (!token) return null;
+  const key = normalizeTokenKey(getTokenAddress(token) || getTokenValue(token));
+  if (!key) return null;
+  return pricesState.prices.get(key) ?? null;
+}
+
+function updateDisplayedTokenValues() {
+  const tokenIn = getSelectedToken(elements.tokenIn);
+  const tokenOut = getSelectedToken(elements.tokenOut);
+
+  const amountIn = Number(String(elements.amountIn.value || "").trim());
+  const amountOut = Number(String(elements.amountOut.value || "").trim());
+
+  const priceIn = getTokenPrice(tokenIn);
+  const priceOut = getTokenPrice(tokenOut);
+
+  if (elements.amountInValue) {
+    if (Number.isFinite(amountIn) && amountIn > 0 && Number.isFinite(priceIn)) {
+      elements.amountInValue.textContent = formatDollarValue(amountIn * priceIn);
+    } else {
+      elements.amountInValue.textContent = "";
+    }
+  }
+
+  if (elements.amountOutValue) {
+    if (Number.isFinite(amountOut) && amountOut > 0 && Number.isFinite(priceOut)) {
+      elements.amountOutValue.textContent = formatDollarValue(amountOut * priceOut);
+    } else {
+      elements.amountOutValue.textContent = "";
+    }
+  }
 }
 
 function debounceQuoteFetch() {
@@ -622,6 +695,7 @@ async function fetchQuote() {
 
     if (!lastSettledQuote) {
       elements.amountOut.value = "Loading...";
+      updateDisplayedTokenValues();
       updateSwapButtonStateWithBalanceCheck();
     }
 
@@ -653,6 +727,7 @@ async function fetchQuote() {
     lastSettledQuote = formatted;
     lastQuoteSignature = signature;
     elements.amountOut.value = formatted;
+    updateDisplayedTokenValues();
   } catch (error) {
     console.error("quote failed:", error);
 
@@ -661,6 +736,8 @@ async function fetchQuote() {
     } else {
       elements.amountOut.value = "";
     }
+
+    updateDisplayedTokenValues();
   } finally {
     isQuoteFetching = false;
     updateSwapButtonStateWithBalanceCheck();
@@ -686,6 +763,57 @@ function stopQuoteRefreshLoop() {
   if (quoteIntervalId !== null) {
     window.clearInterval(quoteIntervalId);
     quoteIntervalId = null;
+  }
+}
+
+async function fetchPrices() {
+  try {
+    const response = await fetch("/prices", {
+      method: "GET",
+      cache: "no-store",
+      headers: {
+        Accept: "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+    const rawPrices = data?.prices ?? data?.Prices ?? {};
+    const quoteToken = data?.quote_token ?? data?.QuoteToken ?? "";
+
+    const nextPrices = new Map();
+    for (const [address, price] of Object.entries(rawPrices)) {
+      const numericPrice = Number(price);
+      if (Number.isFinite(numericPrice)) {
+        nextPrices.set(normalizeTokenKey(address), numericPrice);
+      }
+    }
+
+    pricesState = {
+      quoteToken,
+      prices: nextPrices,
+    };
+
+    updateDisplayedTokenValues();
+  } catch (error) {
+    console.error("failed to load prices:", error);
+  }
+}
+
+function startPricesRefreshLoop() {
+  stopPricesRefreshLoop();
+  pricesIntervalId = window.setInterval(() => {
+    fetchPrices();
+  }, PRICES_REFRESH_MS);
+}
+
+function stopPricesRefreshLoop() {
+  if (pricesIntervalId !== null) {
+    window.clearInterval(pricesIntervalId);
+    pricesIntervalId = null;
   }
 }
 
@@ -722,6 +850,7 @@ async function loadTokens() {
       await refreshDisplayedBalances();
     }
 
+    updateDisplayedTokenValues();
     await fetchQuote();
     updateSwapButtonStateWithBalanceCheck();
   } catch (error) {
@@ -916,6 +1045,7 @@ async function executeSwapPlan() {
 
       clearBalanceCache();
       await refreshDisplayedBalances();
+      await fetchPrices();
       await fetchQuote();
     }
 
@@ -991,6 +1121,7 @@ function bindEvents() {
 
     dispatchElementEvents(elements.amountIn, ["input"]);
 
+    updateDisplayedTokenValues();
     await fetchQuote();
     updateSwapButtonStateWithBalanceCheck();
   });
@@ -1007,6 +1138,7 @@ function bindEvents() {
       await refreshBalanceForSelection(elements.tokenIn, elements.balanceIn);
     }
 
+    updateDisplayedTokenValues();
     updateSwapButtonStateWithBalanceCheck();
     await fetchQuote();
   });
@@ -1018,6 +1150,7 @@ function bindEvents() {
       await refreshBalanceForSelection(elements.tokenOut, elements.balanceOut);
     }
 
+    updateDisplayedTokenValues();
     updateSwapButtonStateWithBalanceCheck();
     await fetchQuote();
   });
@@ -1025,6 +1158,7 @@ function bindEvents() {
   elements.amountIn.addEventListener("input", () => {
     resetQuoteDisplay();
     clearButtonOverride();
+    updateDisplayedTokenValues();
     updateSwapButtonStateWithBalanceCheck();
     debounceQuoteFetch();
   });
@@ -1264,12 +1398,10 @@ function enableTokenSelectionModal() {
 
 function ensureProperAmountInput() {
   elements.amountIn.addEventListener("input", () => {
-    let value =  elements.amountIn.value;
+    let value = elements.amountIn.value;
 
-    // remove invalid characters
     value = value.replace(/[^0-9.]/g, "");
 
-    // allow only one decimal point
     const parts = value.split(".");
     if (parts.length > 2) {
       value = parts[0] + "." + parts.slice(1).join("");
@@ -1284,7 +1416,7 @@ async function init() {
     elements.currentYear.textContent = new Date().getFullYear();
   }
 
-  ensureProperAmountInput()
+  ensureProperAmountInput();
   enableTokenSelectionModal();
   resetDisplayedBalances();
   resetQuoteDisplay();
@@ -1292,6 +1424,7 @@ async function init() {
   bindEvents();
   bindWalletEvents();
   startQuoteRefreshLoop();
+  startPricesRefreshLoop();
 
   if (window.ethereum) {
     try {
@@ -1303,7 +1436,12 @@ async function init() {
     updateSwapButtonStateWithBalanceCheck();
   }
 
-  await loadTokens();
+  await Promise.all([
+    loadTokens(),
+    fetchPrices(),
+  ]);
+
+  updateDisplayedTokenValues();
 }
 
 init();

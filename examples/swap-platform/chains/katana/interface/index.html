@@ -203,6 +203,17 @@
       cursor: default;
     }
 
+    .amount-fiat {
+      margin-top: 8px;
+      font-size: 0.84rem;
+      font-weight: 600;
+      color: #6b7280;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-height: 1.2em;
+    }
+
     .token-pill-wrap {
       flex: 0 0 auto;
       min-width: 0;
@@ -813,7 +824,6 @@
         0 2px 8px rgba(0,0,0,0.06);
     }
 
-    /* Card 2 background */
     .repo-bg-grid {
       position: absolute;
       inset: 0;
@@ -835,7 +845,6 @@
       animation: softFloat 6s ease-in-out infinite;
     }
 
-    /* Card 3 background */
     .client-bg-shell {
       position: absolute;
       right: 18px;
@@ -878,7 +887,6 @@
       opacity: 0.7;
     }
 
-    /* Card 4 background */
     .block-bg {
       position: absolute;
       right: 18px;
@@ -1099,6 +1107,7 @@
       }
 
       .amount-input { font-size: clamp(2rem, 10vw, 2.5rem); }
+      .amount-fiat { font-size: 0.8rem; }
 
       .token-pill-wrap {
         flex: 0 0 auto;
@@ -1267,6 +1276,7 @@
 
       .pane-main { gap: 8px; }
       .amount-input { font-size: clamp(1.75rem, 10.8vw, 2.15rem); }
+      .amount-fiat { font-size: 0.76rem; }
 
       .token-pill-wrap {
         max-width: 48%;
@@ -1321,28 +1331,28 @@
         transition: none !important;
       }
     }
-  .code-snippet {
-    width: 100%;
-    max-width: 100%;
-    padding: 14px 16px;
-    margin: 16px 0 0 0;
-    border-radius: 12px;
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    overflow-x: auto;
-  }
 
-  .code-snippet code {
-    display: block;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 13.5px;
-    line-height: 1.55;
-    color: #0f172a;
-    
-    white-space: pre-wrap;
-    word-break: break-word;
-    overflow-wrap: anywhere;
-  }
+    .code-snippet {
+      width: 100%;
+      max-width: 100%;
+      padding: 14px 16px;
+      margin: 16px 0 0 0;
+      border-radius: 12px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      overflow-x: auto;
+    }
+
+    .code-snippet code {
+      display: block;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 13.5px;
+      line-height: 1.55;
+      color: #0f172a;
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
   </style>
 </head>
 <body class="text-slate-900 antialiased min-h-screen flex flex-col">
@@ -1376,9 +1386,10 @@
             DeFi Simplified
           </h1>
 
-         <p class="mt-4 sm:mt-5 max-w-xl text-sm sm:text-base md:text-lg leading-7 text-slate-600">
-          The backend for this swap interface stays in sync with the Katana blockchain with 3 lines of code:
-        </p>
+          <p class="mt-4 sm:mt-5 max-w-xl text-sm sm:text-base md:text-lg leading-7 text-slate-600">
+            The backend for this swap interface stays in sync with the Katana blockchain with 3 lines of code:
+          </p>
+
           <div class="code-snippet">
             <code>client.OnNewBlock(func(ctx context.Context, s *chain.State) error {<br>&nbsp;&nbsp;&nbsp;&nbsp;return platform.SetState(s)<br>})</code>
           </div>
@@ -1402,6 +1413,7 @@
                       inputmode="decimal"
                       placeholder="0"
                     />
+                    <div id="amountInValue" class="amount-fiat"></div>
                   </div>
 
                   <div class="token-pill-wrap">
@@ -1453,6 +1465,7 @@
                       placeholder="0"
                       readonly
                     />
+                    <div id="amountOutValue" class="amount-fiat"></div>
                   </div>
 
                   <div class="token-pill-wrap">
@@ -1837,6 +1850,6 @@
     });
   </script>
 
-  <script src="app.js?v=5"></script>
+  <script src="app.js?v=6"></script>
 </body>
 </html>
