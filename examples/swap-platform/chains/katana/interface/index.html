@@ -214,6 +214,20 @@
       min-height: 1.2em;
     }
 
+    .price-impact {
+      margin-top: 4px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      min-height: 1.2em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .price-impact--neutral { color: #64748b; }
+    .price-impact--warn { color: #d97706; }
+    .price-impact--danger { color: #dc2626; }
+
     .token-pill-wrap {
       flex: 0 0 auto;
       min-width: 0;
@@ -1108,6 +1122,7 @@
 
       .amount-input { font-size: clamp(2rem, 10vw, 2.5rem); }
       .amount-fiat { font-size: 0.8rem; }
+      .price-impact { font-size: 0.76rem; }
 
       .token-pill-wrap {
         flex: 0 0 auto;
@@ -1277,6 +1292,7 @@
       .pane-main { gap: 8px; }
       .amount-input { font-size: clamp(1.75rem, 10.8vw, 2.15rem); }
       .amount-fiat { font-size: 0.76rem; }
+      .price-impact { font-size: 0.72rem; }
 
       .token-pill-wrap {
         max-width: 48%;
@@ -1387,7 +1403,7 @@
           </h1>
 
           <p class="mt-4 sm:mt-5 max-w-xl text-sm sm:text-base md:text-lg leading-7 text-slate-600">
-            The backend for this swap interface stays in sync with the Katana blockchain with 3 lines of code:
+            The backend for this swap interface stays in sync with the Katana blockchain using 3 lines of code:
           </p>
 
           <div class="code-snippet">
@@ -1466,6 +1482,7 @@
                       readonly
                     />
                     <div id="amountOutValue" class="amount-fiat"></div>
+                    <div id="priceImpactRow" class="price-impact"></div>
                   </div>
 
                   <div class="token-pill-wrap">
@@ -1850,6 +1867,6 @@
     });
   </script>
 
-  <script src="app.js?v=6"></script>
+  <script src="app.js?v=7"></script>
 </body>
 </html>

@@ -11,6 +11,7 @@ const DEFAULT_TOKEN_IMAGE = "/public/token-default.svg";
 const QUOTE_DEBOUNCE_MS = 200;
 const QUOTE_REFRESH_MS = 200;
 const PRICES_REFRESH_MS = 10000;
+const MAX_ALLOWED_PRICE_IMPACT = 15;
 
 const elements = {
   tokenIn: document.getElementById("tokenIn"),
@@ -19,12 +20,13 @@ const elements = {
   amountOut: document.getElementById("amountOut"),
   amountInValue: document.getElementById("amountInValue"),
   amountOutValue: document.getElementById("amountOutValue"),
+  priceImpactRow: document.getElementById("priceImpactRow"),
   balanceIn: document.getElementById("balanceIn"),
   balanceOut: document.getElementById("balanceOut"),
   flipButton: document.getElementById("flipButton"),
   swapButton: document.getElementById("swapButton"),
   connectWalletButton: document.getElementById("connectWalletButton"),
-  currentYear: document.getElementById("current-year"),
+  currentYear: document.getElementById("currentYear"),
 };
 
 let tokensState = [];
@@ -54,6 +56,7 @@ let pricesState = {
   prices: new Map(),
 };
 
+let currentPriceImpact = null;
 let isSwapExecuting = false;
 let buttonMessageOverride = "";
 
@@ -341,6 +344,12 @@ function updateSwapButtonStateWithBalanceCheck() {
     return;
   }
 
+  if (typeof currentPriceImpact === "number" && currentPriceImpact >= MAX_ALLOWED_PRICE_IMPACT) {
+    elements.swapButton.disabled = true;
+    elements.swapButton.textContent = "Price Impact Too High";
+    return;
+  }
+
   elements.swapButton.disabled = false;
   elements.swapButton.textContent = "Swap";
 }
@@ -352,10 +361,18 @@ function resetDisplayedBalances() {
   elements.balanceOut.textContent = "Balance: -";
 }
 
+function clearPriceImpactDisplay() {
+  currentPriceImpact = null;
+  if (!elements.priceImpactRow) return;
+  elements.priceImpactRow.textContent = "";
+  elements.priceImpactRow.className = "price-impact";
+}
+
 function resetQuoteDisplay() {
   lastSettledQuote = "";
   lastQuoteSignature = "";
   elements.amountOut.value = "";
+  clearPriceImpactDisplay();
   updateDisplayedTokenValues();
 }
 
@@ -379,6 +396,14 @@ function formatUnits(value, decimals = 18) {
   }
 
   return `${whole.toString()}.${fractionStr}`;
+}
+
+function formatTokenDisplayNumber(value) {
+  if (!Number.isFinite(value)) return "";
+  return new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 6,
+  }).format(value);
 }
 
 function parseUnits(value, decimals = 18) {
@@ -435,12 +460,60 @@ function getTokenPrice(token) {
   return pricesState.prices.get(key) ?? null;
 }
 
+function computePriceImpact({ amountIn, amountOut, priceIn, priceOut }) {
+  if (
+    !Number.isFinite(amountIn) || amountIn <= 0 ||
+    !Number.isFinite(amountOut) || amountOut <= 0 ||
+    !Number.isFinite(priceIn) || priceIn <= 0 ||
+    !Number.isFinite(priceOut) || priceOut <= 0
+  ) {
+    return null;
+  }
+
+  const midPrice = priceIn / priceOut;
+  const executionPrice = amountOut / amountIn;
+
+  if (!Number.isFinite(midPrice) || midPrice <= 0) return null;
+  if (!Number.isFinite(executionPrice) || executionPrice <= 0) return null;
+
+  return Math.max(0, ((midPrice - executionPrice) / midPrice) * 100);
+}
+
+function renderPriceImpact(impact) {
+  if (!elements.priceImpactRow) return;
+
+  if (!Number.isFinite(impact)) {
+    clearPriceImpactDisplay();
+    return;
+  }
+
+  currentPriceImpact = impact;
+
+  let label = `Price impact: ${impact.toFixed(2)}%`;
+  let className = "price-impact ";
+
+  if (impact >= 15) {
+    label += " · Very high";
+    className += "price-impact--danger";
+  } else if (impact >= 5) {
+    label += " · High";
+    className += "price-impact--danger";
+  } else if (impact >= 1) {
+    className += "price-impact--warn";
+  } else {
+    className += "price-impact--neutral";
+  }
+
+  elements.priceImpactRow.textContent = label;
+  elements.priceImpactRow.className = className;
+}
+
 function updateDisplayedTokenValues() {
   const tokenIn = getSelectedToken(elements.tokenIn);
   const tokenOut = getSelectedToken(elements.tokenOut);
 
-  const amountIn = Number(String(elements.amountIn.value || "").trim());
-  const amountOut = Number(String(elements.amountOut.value || "").trim());
+  const amountIn = Number(String(elements.amountIn.value || "").replace(/,/g, "").trim());
+  const amountOut = Number(String(elements.amountOut.value || "").replace(/,/g, "").trim());
 
   const priceIn = getTokenPrice(tokenIn);
   const priceOut = getTokenPrice(tokenOut);
@@ -460,6 +533,15 @@ function updateDisplayedTokenValues() {
       elements.amountOutValue.textContent = "";
     }
   }
+
+  const impact = computePriceImpact({
+    amountIn,
+    amountOut,
+    priceIn,
+    priceOut,
+  });
+
+  renderPriceImpact(impact);
 }
 
 function debounceQuoteFetch() {
@@ -726,13 +808,13 @@ async function fetchQuote() {
 
     lastSettledQuote = formatted;
     lastQuoteSignature = signature;
-    elements.amountOut.value = formatted;
+    elements.amountOut.value = formatTokenDisplayNumber(Number(formatted));
     updateDisplayedTokenValues();
   } catch (error) {
     console.error("quote failed:", error);
 
     if (lastSettledQuote && lastQuoteSignature === signature) {
-      elements.amountOut.value = lastSettledQuote;
+      elements.amountOut.value = formatTokenDisplayNumber(Number(lastSettledQuote));
     } else {
       elements.amountOut.value = "";
     }
@@ -798,6 +880,7 @@ async function fetchPrices() {
     };
 
     updateDisplayedTokenValues();
+    updateSwapButtonStateWithBalanceCheck();
   } catch (error) {
     console.error("failed to load prices:", error);
   }
@@ -963,7 +1046,7 @@ async function executeSwapPlan() {
 
   let amountInRaw;
   try {
-    amountInRaw = parseUnits(amountInHuman, getTokenDecimals(tokenIn));
+    amountInRaw = parseUnits(amountInHuman.replace(/,/g, ""), getTokenDecimals(tokenIn));
   } catch (error) {
     console.error("invalid amount for swap:", error);
     setButtonOverride("Invalid Amount");
@@ -1399,7 +1482,6 @@ function enableTokenSelectionModal() {
 function ensureProperAmountInput() {
   elements.amountIn.addEventListener("input", () => {
     let value = elements.amountIn.value;
-
     value = value.replace(/[^0-9.]/g, "");
 
     const parts = value.split(".");
