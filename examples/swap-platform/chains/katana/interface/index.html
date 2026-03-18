@@ -1377,7 +1377,7 @@
           </h1>
 
          <p class="mt-4 sm:mt-5 max-w-xl text-sm sm:text-base md:text-lg leading-7 text-slate-600">
-          The backend for this swap interface stays in sync with the Katana blockchain in 3 lines of code:
+          The backend for this swap interface stays in sync with the Katana blockchain with 3 lines of code:
         </p>
           <div class="code-snippet">
             <code>client.OnNewBlock(func(ctx context.Context, s *chain.State) error {<br>&nbsp;&nbsp;&nbsp;&nbsp;return platform.SetState(s)<br>})</code>
