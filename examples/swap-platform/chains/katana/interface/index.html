@@ -4,15 +4,15 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Stop building DeFi backends">
+  <meta name="twitter:title" content="Routing on day one.">
   <meta name="twitter:description" content="3 lines of code connect you to live DeFi state. See our Katana example.">
   <meta name="twitter:image" content="https://defistate-public.s3.us-east-1.amazonaws.com/defistate-preview-001.png">
   <meta property="og:type" content="website">
-  <meta property="og:title" content="Stop building DeFi backends">
+  <meta property="og:title" content="Routing on day one">
   <meta property="og:description" content="3 lines of code connect you to live DeFi state. See our Katana example.">
   <meta property="og:url" content="https://defistate.io/">
   <meta property="og:image" content="https://defistate-public.s3.us-east-1.amazonaws.com/defistate-preview-001.png">
-  <title>DeFiState — Stop building DeFi backends</title>
+  <title>DeFiState — Routing on day one</title>
 
   <script src="https://cdn.tailwindcss.com"></script>
 
@@ -1477,7 +1477,7 @@
     .code-snippet {
       width: 100%;
       max-width: 100%;
-      padding: 14px 16px;
+      padding: 14px 16px 16px 16px;
       margin: 16px 0 0 0;
       border-radius: 12px;
       background: #f8fafc;
@@ -1624,14 +1624,20 @@
 
       <div id="heroGrid" class="hero-grid grid grid-cols-1 lg:grid-cols-[1.06fr_0.94fr] gap-8 sm:gap-10 md:gap-12 lg:gap-14 items-start lg:items-center">
         <section class="order-2 lg:order-1">
-          <h1 class="max-w-4xl text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-extrabold tracking-tight leading-[1.08] text-slate-950">
-            Stop building DeFi backends.
+          <h1 class="max-w-5xl text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-extrabold tracking-tight leading-[0.98] text-slate-950 whitespace-nowrap">
+            Routing on day one.
           </h1>
 
-          <p class="mt-4 sm:mt-5 max-w-xl text-sm sm:text-base md:text-lg leading-7 text-slate-600 p-2">
-            Plug into live DeFi state in ~3 lines.
+          <p class="mt-4 sm:mt-5 max-w-2xl text-base sm:text-lg md:text-xl leading-8 text-slate-800 font-medium">
+            You get live state, we handle the infrastructure.
           </p>
 
+          <p class="mt-4 sm:mt-5 max-w-xl text-sm sm:text-base leading-6 text-slate-500">
+            Plug into live DeFi state in ~3 lines.
+          </p>
+          <p class="mt-5 text-xs text-slate-400">
+            See example:
+          </p>
           <div id="setStateCard" class="code-snippet">
             <code>client.OnNewBlock(func(ctx context.Context, s *chain.State) error {<br>&nbsp;&nbsp;&nbsp;&nbsp;return platform.SetState(ctx, s)<br>})</code>
           </div>
@@ -1752,7 +1758,7 @@
         <div class="max-w-6xl mx-auto">
           <div class="text-center max-w-3xl mx-auto">
             <h2 class="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-extrabold tracking-tight leading-[1.05] text-slate-950">
-              Start streaming in 2 minutes.
+              Get Live State.
             </h2>
           </div>
 
@@ -1766,10 +1772,10 @@
                   <span>Streams</span>
                 </div>
 
-                <h3 class="how-title">Connect to a chain.</h3>
+                <h3 class="how-title">Choose a stream.</h3>
 
                 <p class="how-copy">
-                  Choose a stream endpoint to receive live DeFi state
+                  Copy the stream endpoint for your chain.
                 </p>
 
                 <div class="stream-list">
@@ -1828,7 +1834,7 @@
               <div class="how-card-bg" aria-hidden="true">
                 <div class="repo-bg-grid"></div>
                 <img
-                  src="/public/defistate_hex_logo_2.svg"
+                  src="/public/defistate_hex_logo_2.png"
                   alt=""
                   class="repo-bg-logo"
                   onerror="this.style.display='none'"
@@ -1874,10 +1880,10 @@
                   <span>Client</span>
                 </div>
 
-                <h3 class="how-title">Start streaming.</h3>
+                <h3 class="how-title">Receive live state.</h3>
 
                 <p class="how-copy">
-                  Receive live DeFi state for your selected chain.
+                  Run the client to receive live DeFi state for your chain.
                 </p>
 
                 <a
