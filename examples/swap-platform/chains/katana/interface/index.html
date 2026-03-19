@@ -12,7 +12,7 @@
   <meta property="og:description" content="3 lines of code connect you to live DeFi state. See our Katana example.">
   <meta property="og:url" content="https://defistate.io/">
   <meta property="og:image" content="https://defistate-public.s3.us-east-1.amazonaws.com/defistate-preview.png">
-  <title>DeFiState — DeFi State Simplified</title>
+  <title>DeFiState — Stop building DeFi backends</title>
 
   <script src="https://cdn.tailwindcss.com"></script>
 
@@ -436,6 +436,8 @@
       justify-content: space-between;
       gap: 12px;
       padding: 18px 18px 12px;
+      border-bottom: 1px solid rgba(15,23,42,0.06);
+      background: rgba(255,255,255,0.92);
     }
 
     .token-modal-title {
@@ -459,29 +461,38 @@
       align-items: center;
       justify-content: center;
       cursor: pointer;
+      transition: background 160ms ease, color 160ms ease, transform 160ms ease;
     }
 
     .token-modal-close:hover {
       background: #e5e7eb;
       color: #111827;
+      transform: translateY(-1px);
     }
 
     .token-modal-body {
       display: flex;
       flex-direction: column;
       min-height: 0;
+      flex: 1 1 auto;
       padding: 0 18px 18px;
+      overflow: hidden;
     }
 
     .token-search-wrap {
-      position: relative;
-      margin-bottom: 14px;
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      margin-bottom: 12px;
+      padding-top: 14px;
+      padding-bottom: 2px;
+      background: rgba(255,255,255,0.98);
     }
 
     .token-search-icon {
       position: absolute;
       left: 14px;
-      top: 50%;
+      top: calc(50% + 7px);
       transform: translateY(-50%);
       color: #9ca3af;
       font-size: 1rem;
@@ -490,14 +501,16 @@
 
     .token-search-input {
       width: 100%;
-      border: 0;
+      border: 1px solid transparent;
       outline: none;
+      border: 1px solid rgba(15, 23, 42, 0.08);
       border-radius: 18px;
       background: #f3f4f6;
       color: var(--text);
       padding: 14px 16px 14px 42px;
       font-size: 1rem;
       font-weight: 500;
+      transition: background 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
     }
 
     .token-search-input::placeholder {
@@ -505,94 +518,187 @@
     }
 
     .token-search-input:focus {
-      outline: none;
-      box-shadow: none;
+        background: #ffffff;
+        box-shadow: none;
+        outline: none;
     }
 
     .token-list {
-      overflow: auto;
+      flex: 1 1 auto;
       min-height: 0;
-      padding-right: 2px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      padding-right: 4px;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(148,163,184,0.55) transparent;
     }
 
     .token-list::-webkit-scrollbar {
       width: 8px;
     }
 
+    .token-list::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
     .token-list::-webkit-scrollbar-thumb {
-      background: rgba(156,163,175,0.45);
+      background: rgba(148,163,184,0.45);
       border-radius: 9999px;
+    }
+
+    .token-list::-webkit-scrollbar-thumb:hover {
+      background: rgba(100,116,139,0.65);
     }
 
     .token-row {
       width: 100%;
-      border: 0;
-      background: transparent;
       display: flex;
       align-items: center;
-      gap: 12px;
-      padding: 12px 6px;
-      border-radius: 18px;
-      cursor: pointer;
+      gap: 0.9rem;
+      padding: 0.85rem 0.95rem;
+      border: 1px solid rgba(148, 163, 184, 0.14);
+      border-radius: 1rem;
+      background: rgba(255, 255, 255, 0.78);
+      transition:
+        background 160ms ease,
+        border-color 160ms ease,
+        transform 120ms ease,
+        box-shadow 160ms ease;
       text-align: left;
-      transition: background-color 160ms ease;
+      cursor: pointer;
     }
 
     .token-row:hover {
-      background: #f8fafc;
+      background: rgba(248, 250, 252, 0.96);
+      border-color: rgba(148, 163, 184, 0.26);
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+    }
+
+    .token-row:active {
+      transform: scale(0.995);
     }
 
     .token-row-icon {
-      width: 42px;
-      height: 42px;
+      width: 2.7rem;
+      height: 2.7rem;
+      min-width: 2.7rem;
       border-radius: 9999px;
-      background: linear-gradient(180deg, #dbeafe 0%, #bfdbfe 100%);
-      color: #1d4ed8;
+      overflow: hidden;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      font-size: 0.82rem;
-      font-weight: 800;
-      flex-shrink: 0;
-      overflow: hidden;
+      background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      color: #0f172a;
+      font-size: 0.78rem;
+      font-weight: 700;
     }
 
     .token-row-icon img {
       width: 100%;
       height: 100%;
       object-fit: cover;
-      display: block;
+    }
+
+    .token-row-icon-fallback {
+      background: #e2e8f0;
+      color: #0f172a;
     }
 
     .token-row-main {
       min-width: 0;
       flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 0.16rem;
+    }
+
+    .token-row-top {
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+      min-width: 0;
     }
 
     .token-row-symbol {
       font-size: 1rem;
       font-weight: 700;
-      color: var(--text);
-      line-height: 1.2;
+      color: #0f172a;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+    }
+
+    .token-row-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      height: 1.25rem;
+      padding: 0 0.45rem;
+      border-radius: 9999px;
+      background: rgba(99, 102, 241, 0.08);
+      color: #4f46e5;
+      font-size: 0.67rem;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      flex-shrink: 0;
     }
 
     .token-row-name {
-      margin-top: 2px;
-      font-size: 0.86rem;
-      color: #6b7280;
+      font-size: 0.84rem;
+      color: #64748b;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .token-row-arrow {
+      width: 1.1rem;
+      height: 1.1rem;
+      color: #94a3b8;
+      flex-shrink: 0;
+      opacity: 0;
+      transform: translateX(-2px);
+      transition:
+        opacity 160ms ease,
+        transform 160ms ease,
+        color 160ms ease;
+    }
+
+    .token-row:hover .token-row-arrow {
+      opacity: 1;
+      transform: translateX(0);
+      color: #475569;
+    }
+
+    .token-row-arrow svg {
+      width: 100%;
+      height: 100%;
     }
 
     .token-empty {
-      padding: 22px 6px 6px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem 1rem;
       text-align: center;
-      font-size: 0.92rem;
-      color: #6b7280;
+      color: #64748b;
+    }
+
+    .token-empty-title {
+      font-size: 0.98rem;
+      font-weight: 600;
+      color: #0f172a;
+    }
+
+    .token-empty-subtitle {
+      margin-top: 0.35rem;
+      font-size: 0.85rem;
     }
 
     .how-card {
@@ -824,11 +930,6 @@
       background: rgba(255,255,255,0.74);
       color: #0f172a;
       border: 1px solid rgba(255,255,255,0.9);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      box-shadow:
-        0 8px 20px rgba(15,23,42,0.06),
-        inset 0 1px 0 rgba(255,255,255,0.7);
     }
 
     .connect-button:hover {
@@ -1194,17 +1295,29 @@
       .token-modal-title { font-size: 1.2rem; }
       .token-modal-body { padding: 0 16px 16px; }
 
+      .token-search-wrap {
+        padding-top: 12px;
+      }
+
+      .token-search-icon {
+        top: calc(50% + 6px);
+      }
+
       .token-search-input {
         font-size: 0.96rem;
         padding-top: 13px;
         padding-bottom: 13px;
       }
 
-      .token-row { padding: 12px 4px; }
+      .token-row {
+        padding: 0.8rem 0.8rem;
+        border-radius: 0.95rem;
+      }
 
       .token-row-icon {
-        width: 40px;
-        height: 40px;
+        width: 2.45rem;
+        height: 2.45rem;
+        min-width: 2.45rem;
       }
 
       .how-card {
@@ -1352,7 +1465,10 @@
       .stream-copy-button,
       .connect-button,
       .primary-button,
-      .repo-bg-logo {
+      .repo-bg-logo,
+      .token-modal-close,
+      .token-search-input,
+      .token-row {
         animation: none !important;
         transition: none !important;
       }
@@ -1467,44 +1583,43 @@
         </div>
 
         <div class="flex items-center gap-2 sm:gap-3">
-            <button
-                id="chainSelectorButton"
-                type="button"
-                title="Katana"
-                class="inline-flex items-center gap-1.5 h-9 sm:h-10 px-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 transition-colors"
+          <button
+            id="chainSelectorButton"
+            type="button"
+            title="Katana"
+            class="inline-flex items-center gap-1.5 h-9 sm:h-10 px-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 transition-colors"
+          >
+            <span class="flex items-center justify-center h-5 w-5 sm:h-6 sm:w-6 overflow-hidden rounded-full">
+              <img
+                id="chainIcon"
+                src="/public/katana-logo.svg"
+                alt="Katana"
+                class="h-full w-full object-contain"
+              />
+            </span>
+
+            <svg
+              class="h-3.5 w-3.5 text-slate-500 shrink-0"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              aria-hidden="true"
             >
-                <span class="flex items-center justify-center h-5 w-5 sm:h-6 sm:w-6 overflow-hidden rounded-full">
-                <img
-                    id="chainIcon"
-                    src="/public/katana-logo.svg"
-                    alt="Katana"
-                    class="h-full w-full object-contain"
-                />
-                </span>
+              <path
+                fill-rule="evenodd"
+                d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+                clip-rule="evenodd"
+              />
+            </svg>
+          </button>
 
-                <svg
-                class="h-3.5 w-3.5 text-slate-500 shrink-0"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-                aria-hidden="true"
-                >
-                <path
-                    fill-rule="evenodd"
-                    d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
-                    clip-rule="evenodd"
-                />
-                </svg>
-            </button>
-
-            <button
-                id="connectWalletButton"
-                type="button"
-                class="connect-button inline-flex items-center justify-center px-3.5 sm:px-5 py-2.5 sm:py-3 rounded-2xl text-xs sm:text-sm font-semibold transition-colors shrink-0"
-            >
-                Connect Wallet
-            </button>
-            </div>
-
+          <button
+            id="connectWalletButton"
+            type="button"
+            class="inline-flex items-center gap-1.5 h-9 sm:h-10 px-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 transition-colors text-sm sm:text-xs font-semibold px-8"
+          >
+            Connect
+          </button>
+        </div>
       </header>
 
       <div id="heroGrid" class="hero-grid grid grid-cols-1 lg:grid-cols-[1.06fr_0.94fr] gap-8 sm:gap-10 md:gap-12 lg:gap-14 items-start lg:items-center">
@@ -1518,7 +1633,7 @@
           </p>
 
           <div id="setStateCard" class="code-snippet">
-            <code>client.OnNewBlock(func(ctx context.Context, s *chain.State) error {<br>&nbsp;&nbsp;&nbsp;&nbsp;return platform.SetState(s)<br>})</code>
+            <code>client.OnNewBlock(func(ctx context.Context, s *chain.State) error {<br>&nbsp;&nbsp;&nbsp;&nbsp;return platform.SetState(ctx, s)<br>})</code>
           </div>
         </section>
 
@@ -1972,9 +2087,31 @@
         console.error("Failed to copy stream URL", err);
       }
     });
+
+    document.addEventListener("DOMContentLoaded", () => {
+      const tokenModalOverlay = document.getElementById("tokenModalOverlay");
+      const tokenSearchInput = document.getElementById("tokenSearchInput");
+      const tokenList = document.getElementById("tokenList");
+
+      if (!tokenModalOverlay || !tokenSearchInput || !tokenList) return;
+
+      const openObserver = new MutationObserver(() => {
+        if (tokenModalOverlay.classList.contains("open")) {
+          requestAnimationFrame(() => {
+            tokenSearchInput.focus({ preventScroll: true });
+            tokenList.scrollTop = 0;
+          });
+        }
+      });
+
+      openObserver.observe(tokenModalOverlay, {
+        attributes: true,
+        attributeFilter: ["class"]
+      });
+    });
   </script>
 
-  <script src="graph.js?v=1"></script>
-  <script src="app.js?v=9"></script>
+  <script src="graph.js?v=2"></script>
+  <script src="app.js?v=12"></script>
 </body>
 </html>

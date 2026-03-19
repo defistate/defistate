@@ -2,6 +2,7 @@ const NATIVE_TOKEN_PLACEHOLDERS = new Set([
   "0x0000000000000000000000000000000000000000",
   "native",
 ]);
+
 const DEFAULT_TOKEN_IN = "0xee7d8bcfb72bc1880d0cf19822eb0a2e6577ab62";
 const DEFAULT_TOKEN_OUT = "0x0913da6da4b42f538b445599b46bb4622342cf52";
 const DEFAULT_AMOUNT_IN = "1";
@@ -51,6 +52,8 @@ let isQuoteFetching = false;
 let pendingQuoteRerun = false;
 let lastSettledQuote = "";
 let lastQuoteSignature = "";
+let quoteRequestId = 0;
+let latestAppliedQuoteRequestId = 0;
 
 let pricesIntervalId = null;
 let pricesState = {
@@ -391,13 +394,14 @@ function resetDisplayedBalances() {
 function clearPriceImpactDisplay() {
   currentPriceImpact = null;
   if (!elements.priceImpactRow) return;
-  elements.priceImpactRow.textContent = "";
+  elements.priceImpactRow.textContent = "-";
   elements.priceImpactRow.className = "price-impact";
 }
 
 function resetQuoteDisplay() {
   lastSettledQuote = "";
   lastQuoteSignature = "";
+  latestAppliedQuoteRequestId = 0;
   elements.amountOut.value = "";
   clearPriceImpactDisplay();
   updateDisplayedTokenValues();
@@ -535,6 +539,45 @@ function renderPriceImpact(impact) {
   elements.priceImpactRow.className = className;
 }
 
+function getCurrentQuoteContext() {
+  const tokenIn = getSelectedToken(elements.tokenIn);
+  const tokenOut = getSelectedToken(elements.tokenOut);
+  const amountIn = String(elements.amountIn.value || "").trim();
+
+  if (!tokenIn || !tokenOut) {
+    return null;
+  }
+
+  if (isSameToken()) {
+    return null;
+  }
+
+  if (!amountIn || Number(amountIn) <= 0) {
+    return null;
+  }
+
+  const tokenInValue = getTokenValue(tokenIn);
+  const tokenOutValue = getTokenValue(tokenOut);
+
+  if (!tokenInValue || !tokenOutValue) {
+    return null;
+  }
+
+  return {
+    tokenIn,
+    tokenOut,
+    tokenInValue,
+    tokenOutValue,
+    amountIn,
+  };
+}
+
+function getCurrentQuoteSignature() {
+  const context = getCurrentQuoteContext();
+  if (!context) return "";
+  return `${context.tokenInValue}:${context.tokenOutValue}:${context.amountIn}`;
+}
+
 function updateDisplayedTokenValues() {
   const tokenIn = getSelectedToken(elements.tokenIn);
   const tokenOut = getSelectedToken(elements.tokenOut);
@@ -549,7 +592,7 @@ function updateDisplayedTokenValues() {
     if (Number.isFinite(amountIn) && amountIn > 0 && Number.isFinite(priceIn)) {
       elements.amountInValue.textContent = formatDollarValue(amountIn * priceIn);
     } else {
-      elements.amountInValue.textContent = "";
+      elements.amountInValue.textContent = "-";
     }
   }
 
@@ -557,8 +600,22 @@ function updateDisplayedTokenValues() {
     if (Number.isFinite(amountOut) && amountOut > 0 && Number.isFinite(priceOut)) {
       elements.amountOutValue.textContent = formatDollarValue(amountOut * priceOut);
     } else {
-      elements.amountOutValue.textContent = "";
+      elements.amountOutValue.textContent = "-";
     }
+  }
+
+  const currentSignature = getCurrentQuoteSignature();
+  const hasValidSettledQuote =
+    !!lastSettledQuote &&
+    !!lastQuoteSignature &&
+    lastQuoteSignature === currentSignature &&
+    latestAppliedQuoteRequestId > 0 &&
+    String(elements.amountOut.value || "").trim() !== "" &&
+    String(elements.amountOut.value || "").trim() !== "Loading...";
+
+  if (!hasValidSettledQuote) {
+    clearPriceImpactDisplay();
+    return;
   }
 
   const impact = computePriceImpact({
@@ -736,39 +793,6 @@ function clearBalanceCache() {
   balancesCache = new Map();
 }
 
-function getCurrentQuoteContext() {
-  const tokenIn = getSelectedToken(elements.tokenIn);
-  const tokenOut = getSelectedToken(elements.tokenOut);
-  const amountIn = String(elements.amountIn.value || "").trim();
-
-  if (!tokenIn || !tokenOut) {
-    return null;
-  }
-
-  if (isSameToken()) {
-    return null;
-  }
-
-  if (!amountIn || Number(amountIn) <= 0) {
-    return null;
-  }
-
-  const tokenInValue = getTokenValue(tokenIn);
-  const tokenOutValue = getTokenValue(tokenOut);
-
-  if (!tokenInValue || !tokenOutValue) {
-    return null;
-  }
-
-  return {
-    tokenIn,
-    tokenOut,
-    tokenInValue,
-    tokenOutValue,
-    amountIn,
-  };
-}
-
 async function fetchQuote() {
   const context = getCurrentQuoteContext();
 
@@ -788,6 +812,7 @@ async function fetchQuote() {
   isQuoteFetching = true;
   pendingQuoteRerun = false;
 
+  const requestId = ++quoteRequestId;
   const decimalsIn = getTokenDecimals(context.tokenIn);
   const decimalsOut = getTokenDecimals(context.tokenOut);
 
@@ -830,9 +855,15 @@ async function fetchQuote() {
       throw new Error("quote response missing AmountOut");
     }
 
+    const currentSignature = getCurrentQuoteSignature();
+    if (requestId !== quoteRequestId || currentSignature !== signature) {
+      return;
+    }
+
     const amountOutRaw = BigInt(raw);
     const formatted = formatUnits(amountOutRaw, decimalsOut);
 
+    latestAppliedQuoteRequestId = requestId;
     lastSettledQuote = formatted;
     lastQuoteSignature = signature;
     elements.amountOut.value = formatTokenDisplayNumber(Number(formatted));
@@ -840,10 +871,15 @@ async function fetchQuote() {
   } catch (error) {
     console.error("quote failed:", error);
 
-    if (lastSettledQuote && lastQuoteSignature === signature) {
+    const currentSignature = getCurrentQuoteSignature();
+    const isStillCurrent = requestId === quoteRequestId && currentSignature === signature;
+
+    if (isStillCurrent && lastSettledQuote && lastQuoteSignature === signature) {
+      latestAppliedQuoteRequestId = requestId;
       elements.amountOut.value = formatTokenDisplayNumber(Number(lastSettledQuote));
-    } else {
+    } else if (isStillCurrent) {
       elements.amountOut.value = "";
+      clearPriceImpactDisplay();
     }
 
     updateDisplayedTokenValues();
@@ -1372,7 +1408,6 @@ function enableTokenSelectionModal() {
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;");
   }
-
   function renderTokenList(filter = "") {
     const sourceSelect = activeTarget === "in" ? tokenInSelect : tokenOutSelect;
     const options = getSelectOptions(sourceSelect);
@@ -1385,26 +1420,54 @@ function enableTokenSelectionModal() {
     });
 
     if (!filtered.length) {
-      tokenList.innerHTML = '<div class="token-empty">No matching tokens found.</div>';
+      tokenList.innerHTML = `
+        <div class="token-empty">
+          <div class="token-empty-title">No matching tokens</div>
+          <div class="token-empty-subtitle">Try searching by symbol or address.</div>
+        </div>
+      `;
       return;
     }
 
-    tokenList.innerHTML = filtered.map((item) => `
-      <button class="token-row" type="button" data-value="${escapeHtml(item.value)}">
-        <span class="token-row-icon">
-          <img
-            src="${escapeHtml(item.logo)}"
-            alt="${escapeHtml(item.label)}"
-            loading="lazy"
-            data-default-src="${escapeHtml(DEFAULT_TOKEN_IMAGE)}"
-          />
-        </span>
-        <span class="token-row-main">
-          <div class="token-row-symbol">${escapeHtml(item.label)}</div>
-          <div class="token-row-name">${escapeHtml(item.value || "Token")}</div>
-        </span>
-      </button>
-    `).join("");
+    tokenList.innerHTML = filtered
+      .map((item) => {
+        const shortValue =
+          item.value && item.value.length > 18
+            ? `${item.value.slice(0, 8)}...${item.value.slice(-6)}`
+            : item.value || "Token";
+
+        return `
+          <button class="token-row" type="button" data-value="${escapeHtml(item.value)}">
+            <span class="token-row-icon">
+              <img
+                src="${escapeHtml(item.logo)}"
+                alt="${escapeHtml(item.label)}"
+                loading="lazy"
+                data-default-src="${escapeHtml(DEFAULT_TOKEN_IMAGE)}"
+              />
+            </span>
+
+            <span class="token-row-main">
+              <span class="token-row-top">
+                <span class="token-row-symbol">${escapeHtml(item.label)}</span>
+                <span class="token-row-badge">Token</span>
+              </span>
+              <span class="token-row-name">${escapeHtml(shortValue)}</span>
+            </span>
+
+            <span class="token-row-arrow" aria-hidden="true">
+              <svg viewBox="0 0 20 20" fill="currentColor">
+                <path
+                  fill-rule="evenodd"
+                  d="M7.21 14.77a.75.75 0 0 1 .02-1.06L10.94 10 7.23 6.29a.75.75 0 1 1 1.06-1.06l4.24 4.24a.75.75 0 0 1 0 1.06l-4.24 4.24a.75.75 0 0 1-1.08 0Z"
+                  clip-rule="evenodd"
+                />
+              </svg>
+            </span>
+          </button>
+        `;
+      })
+      .join("");
 
     const images = tokenList.querySelectorAll("img");
 
@@ -1413,6 +1476,7 @@ function enableTokenSelectionModal() {
         if (img.dataset.fallbackApplied === "true") {
           img.style.display = "none";
           img.parentElement.textContent = getInitials(img.alt);
+          img.parentElement.classList.add("token-row-icon-fallback");
           return;
         }
 

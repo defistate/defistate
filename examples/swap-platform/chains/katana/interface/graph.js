@@ -10,9 +10,8 @@
   let resizeTimeout = null;
   let lastPulseAt = 0;
   let pulseCycle = 0;
+  let isRunning = false;
 
-  // Keep this small and curated.
-  // Replace/add assets here as you like.
   const PULSE_ICONS = [
     { href: "/public/ethereum-logo.png", label: "ETH" },
     { href: "/public/katana-logo.svg", label: "KAT" },
@@ -36,35 +35,55 @@
     return el;
   }
 
-  function ensureOverlay(hero) {
-    if (overlay) return;
+  function createOverlay(hero) {
+    const nextOverlay = document.createElement("div");
+    nextOverlay.className = "state-graph-overlay";
+    nextOverlay.setAttribute("aria-hidden", "true");
 
-    overlay = document.createElement("div");
-    overlay.className = "state-graph-overlay";
-    overlay.setAttribute("aria-hidden", "true");
+    const nextSvg = createSvgEl("svg");
 
-    svg = createSvgEl("svg");
-
-    groups = {
+    const nextGroups = {
       defs: createSvgEl("defs"),
       rails: createSvgEl("g"),
       particleBack: createSvgEl("g"),
       particleFront: createSvgEl("g"),
     };
 
-    svg.appendChild(groups.defs);
-    svg.appendChild(groups.rails);
-    svg.appendChild(groups.particleBack);
-    svg.appendChild(groups.particleFront);
-    overlay.appendChild(svg);
-    hero.appendChild(overlay);
+    nextSvg.appendChild(nextGroups.defs);
+    nextSvg.appendChild(nextGroups.rails);
+    nextSvg.appendChild(nextGroups.particleBack);
+    nextSvg.appendChild(nextGroups.particleFront);
+    nextOverlay.appendChild(nextSvg);
+    hero.appendChild(nextOverlay);
+
+    overlay = nextOverlay;
+    svg = nextSvg;
+    groups = nextGroups;
   }
 
-  function clearGraph() {
+  function ensureOverlay(hero) {
+    const overlayNeedsRecreate =
+      !overlay ||
+      !hero.contains(overlay) ||
+      !svg ||
+      !groups;
+
+    if (overlayNeedsRecreate) {
+      destroyOverlay();
+      createOverlay(hero);
+    }
+  }
+
+  function stopAnimationLoop() {
     if (rafId) {
       cancelAnimationFrame(rafId);
       rafId = null;
     }
+    isRunning = false;
+  }
+
+  function clearGraph() {
+    stopAnimationLoop();
 
     particles = [];
     lastPulseAt = 0;
@@ -74,6 +93,20 @@
     groups.rails.innerHTML = "";
     groups.particleBack.innerHTML = "";
     groups.particleFront.innerHTML = "";
+  }
+
+  function destroyOverlay() {
+    stopAnimationLoop();
+    particles = [];
+    lastPulseAt = 0;
+
+    if (overlay?.parentNode) {
+      overlay.parentNode.removeChild(overlay);
+    }
+
+    overlay = null;
+    svg = null;
+    groups = null;
   }
 
   function pointOnRight(rect, heroRect, offsetY = 0) {
@@ -170,7 +203,6 @@
     fallbackText.setAttribute("fill", "white");
     fallbackText.textContent = icon.label.slice(0, 3).toUpperCase();
 
-    // Show both; image on top. If image fails, fallback remains visible beneath.
     front.appendChild(fallbackCircle);
     front.appendChild(fallbackText);
     front.appendChild(image);
@@ -184,6 +216,39 @@
   function addParticle(path, progress, icon, particleIndex) {
     const { back, front } = createIconParticle(icon, particleIndex);
     particles.push({ path, progress, back, front });
+  }
+
+  function canRenderGraph() {
+    const hero = q("heroGrid");
+    const setStateCard = q("setStateCard");
+    const swapCard = q("swapCard");
+    const sellPane = q("swapSellPane");
+    const buyPane = q("swapBuyPane");
+    const tokenIn = q("tokenInTrigger");
+    const tokenOut = q("tokenOutTrigger");
+    const swapButton = q("swapButton");
+    const flipButton = q("flipButton");
+
+    if (
+      !hero || !setStateCard || !swapCard ||
+      !sellPane || !buyPane || !tokenIn || !tokenOut || !swapButton || !flipButton
+    ) {
+      return false;
+    }
+
+    if (!document.body.contains(hero)) {
+      return false;
+    }
+
+    if (document.hidden) {
+      return false;
+    }
+
+    if (window.innerWidth < DESKTOP_MIN) {
+      return false;
+    }
+
+    return true;
   }
 
   function buildGraph() {
@@ -201,10 +266,11 @@
       !hero || !setStateCard || !swapCard ||
       !sellPane || !buyPane || !tokenIn || !tokenOut || !swapButton || !flipButton
     ) {
+      destroyOverlay();
       return;
     }
 
-    if (window.innerWidth < DESKTOP_MIN) {
+    if (document.hidden || window.innerWidth < DESKTOP_MIN) {
       if (overlay) overlay.style.display = "none";
       clearGraph();
       return;
@@ -289,15 +355,21 @@
 
     let last = performance.now();
     lastPulseAt = performance.now();
+    isRunning = true;
 
     function animate(now) {
+      if (!isRunning || !canRenderGraph()) {
+        stopAnimationLoop();
+        return;
+      }
+
       const dt = Math.min((now - last) / 1000, 0.05);
       last = now;
 
       const PULSE_INTERVAL = 3000;
 
       if (now - lastPulseAt >= PULSE_INTERVAL) {
-        lastPulseAt += PULSE_INTERVAL;
+        lastPulseAt = now;
         pulseCycle += 1;
 
         particles.forEach((p, index) => {
@@ -330,15 +402,42 @@
   }
 
   function rebuild() {
+    if (document.hidden) {
+      stopAnimationLoop();
+      return;
+    }
+
     buildGraph();
   }
 
   function onResize() {
     clearTimeout(resizeTimeout);
-    resizeTimeout = setTimeout(buildGraph, 80);
+    resizeTimeout = setTimeout(() => {
+      rebuild();
+    }, 80);
+  }
+
+  function onVisibilityChange() {
+    if (document.hidden) {
+      stopAnimationLoop();
+      return;
+    }
+
+    rebuild();
+  }
+
+  function onPageShow() {
+    rebuild();
+  }
+
+  function onPageHide() {
+    stopAnimationLoop();
   }
 
   window.addEventListener("load", rebuild);
   window.addEventListener("resize", onResize);
+  window.addEventListener("pageshow", onPageShow);
+  window.addEventListener("pagehide", onPageHide);
   document.addEventListener("DOMContentLoaded", rebuild);
+  document.addEventListener("visibilitychange", onVisibilityChange);
 })();
