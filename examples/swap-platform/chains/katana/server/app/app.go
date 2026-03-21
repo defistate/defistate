@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	DefaultFindBestSwapPathRuns = 3
+	DefaultFindBestSwapPathRuns = 4
 )
 
 type Platform struct {
@@ -356,7 +356,7 @@ func (p *Platform) QuoteAlgorithm(
 	}
 
 	for _, fragment := range fragmentAmounts {
-		pathFragment, amountOutFragment, err := rt.FindBestSwapPath(
+		pathFragment, amountOutFragment, err := rt.FindBestSwapPathTopK(
 			DefaultFindBestSwapPathRuns,
 			fragment,
 			tIn.ID,
