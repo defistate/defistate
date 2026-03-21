@@ -58,8 +58,10 @@ func main() {
 		ctx,
 		big.NewInt(10_000_000), // 10 USDT (6 decimals)
 		common.HexToAddress("0x2dca96907fde857dd3d816880a0df407eeb2d2f2"),
-		common.HexToAddress("0x435f128E5E6E134C8C25Bf26F4C7b223B8F634Dd"),
+		common.HexToAddress("0xA065bBEaf22cb9cd994Bf3cc519BFcb35fD87182"),
 		ethClient,
+		big.NewInt(10_000_000_000), // 10k USDT
+		1000,
 	)
 
 	client, err := katana.DialJSONRPCStream(
@@ -76,6 +78,15 @@ func main() {
 	client.OnNewBlock(func(ctx context.Context, s *katana.State) error {
 		return platform.SetState(s)
 	})
+
+	err = platform.WaitForPrices(
+		ctx,
+		2*time.Minute,
+	)
+	if err != nil {
+		logger.Error("failed to load prices", "error", err)
+		return
+	}
 
 	// --- HTTP SERVER SETUP ---
 	mux := http.NewServeMux()
