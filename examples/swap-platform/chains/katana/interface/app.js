@@ -295,25 +295,18 @@ function updateSwapButtonState() {
   elements.swapButton.disabled = !(hasTokens && hasWallet);
 }
 
-function updateSwapButtonStateWithBalanceCheck() {
+function getButtonState() {
   if (isSwapExecuting) {
-    elements.swapButton.disabled = true;
-    setSwapButtonDangerState(false);
-    return;
+    return { label: elements.swapButton.textContent || "Pending", disabled: true, danger: false };
   }
 
   if (buttonMessageOverride) {
-    elements.swapButton.disabled = true;
-    elements.swapButton.textContent = buttonMessageOverride;
-    setSwapButtonDangerState(false);
-    return;
+    return { label: buttonMessageOverride, disabled: true, danger: false };
   }
 
+  // Highest priority: onboarding
   if (!walletState.connected) {
-    elements.swapButton.disabled = true;
-    elements.swapButton.textContent = "Connect";
-    setSwapButtonDangerState(false);
-    return;
+    return { label: "Get Started", disabled: false, danger: false };
   }
 
   const tokenIn = getSelectedToken(elements.tokenIn);
@@ -321,67 +314,53 @@ function updateSwapButtonStateWithBalanceCheck() {
   const amount = String(elements.amountIn.value || "").trim();
 
   if (!tokenIn || !tokenOut) {
-    elements.swapButton.disabled = true;
-    elements.swapButton.textContent = "Select Tokens";
-    setSwapButtonDangerState(false);
-    return;
+    return { label: "Select Tokens", disabled: true, danger: false };
   }
 
   if (isSameToken()) {
-    elements.swapButton.disabled = true;
-    elements.swapButton.textContent = "Select Different Tokens";
-    setSwapButtonDangerState(false);
-    return;
+    return { label: "Select Different Tokens", disabled: true, danger: false };
   }
 
   if (!amount) {
-    elements.swapButton.disabled = true;
-    elements.swapButton.textContent = "Enter Amount";
-    setSwapButtonDangerState(false);
-    return;
+    return { label: "Enter Amount", disabled: true, danger: false };
   }
 
   let amountRaw;
   try {
     amountRaw = parseUnits(amount, currentBalanceInDecimals);
   } catch {
-    elements.swapButton.disabled = true;
-    elements.swapButton.textContent = "Invalid Amount";
-    setSwapButtonDangerState(false);
-    return;
+    return { label: "Invalid Amount", disabled: true, danger: false };
   }
 
   if (amountRaw <= 0n) {
-    elements.swapButton.disabled = true;
-    elements.swapButton.textContent = "Enter Amount";
-    setSwapButtonDangerState(false);
-    return;
+    return { label: "Enter Amount", disabled: true, danger: false };
   }
 
   if (amountRaw > currentBalanceInRaw) {
-    elements.swapButton.disabled = true;
-    elements.swapButton.textContent = `Insufficient ${getTokenSymbol(tokenIn)}`;
-    setSwapButtonDangerState(false);
-    return;
+    return {
+      label: `Insufficient ${getTokenSymbol(tokenIn)}`,
+      disabled: true,
+      danger: false,
+    };
   }
 
-  if (!String(elements.amountOut.value || "").trim()) {
-    elements.swapButton.disabled = true;
-    elements.swapButton.textContent = "Loading Quote";
-    setSwapButtonDangerState(false);
-    return;
+  const amountOutValue = String(elements.amountOut.value || "").trim();
+  if (!amountOutValue || amountOutValue === "Loading...") {
+    return { label: "Loading Quote", disabled: true, danger: false };
   }
 
   if (typeof currentPriceImpact === "number" && currentPriceImpact >= MAX_ALLOWED_PRICE_IMPACT) {
-    elements.swapButton.disabled = false;
-    elements.swapButton.textContent = "High Price Impact";
-    setSwapButtonDangerState(true);
-    return;
+    return { label: "High Price Impact", disabled: false, danger: true };
   }
 
-  elements.swapButton.disabled = false;
-  elements.swapButton.textContent = "Swap";
-  setSwapButtonDangerState(false);
+  return { label: "Swap", disabled: false, danger: false };
+}
+
+function updateSwapButtonStateWithBalanceCheck() {
+  const { label, disabled, danger } = getButtonState();
+  elements.swapButton.disabled = disabled;
+  elements.swapButton.textContent = label;
+  setSwapButtonDangerState(danger);
 }
 
 function resetDisplayedBalances() {
@@ -407,26 +386,61 @@ function resetQuoteDisplay() {
   updateDisplayedTokenValues();
 }
 
-function formatUnits(value, decimals = 18) {
+function formatUnits(value, decimals = 18, maxFractionDigits = 12) {
   const big = typeof value === "bigint" ? value : BigInt(value);
   const safeDecimals = Number.isFinite(decimals) ? decimals : 18;
   const base = 10n ** BigInt(safeDecimals);
   const whole = big / base;
   const fraction = big % base;
 
-  if (fraction === 0n) {
-    return whole.toString();
+  let wholeStr = whole.toString();
+
+  if (fraction === 0n || maxFractionDigits === 0) {
+    return wholeStr;
   }
 
   let fractionStr = fraction.toString().padStart(safeDecimals, "0");
   fractionStr = fractionStr.replace(/0+$/, "");
-  fractionStr = fractionStr.slice(0, 6);
 
   if (!fractionStr) {
-    return whole.toString();
+    return wholeStr;
   }
 
-  return `${whole.toString()}.${fractionStr}`;
+  if (
+    Number.isFinite(maxFractionDigits) &&
+    maxFractionDigits > 0 &&
+    fractionStr.length > maxFractionDigits
+  ) {
+    fractionStr = fractionStr.slice(0, maxFractionDigits).replace(/0+$/, "");
+  }
+
+  if (!fractionStr) {
+    return wholeStr;
+  }
+
+  return `${wholeStr}.${fractionStr}`;
+}
+
+function addThousandsSeparatorsToDecimalString(value) {
+  const str = String(value || "").trim();
+  if (!str) return "";
+
+  const negative = str.startsWith("-");
+  const unsigned = negative ? str.slice(1) : str;
+
+  const [whole, fraction] = unsigned.split(".");
+  const wholeWithCommas = (whole || "0").replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+
+  if (fraction && fraction.length > 0) {
+    return `${negative ? "-" : ""}${wholeWithCommas}.${fraction}`;
+  }
+
+  return `${negative ? "-" : ""}${wholeWithCommas}`;
+}
+
+function formatTokenDisplayStringFromRaw(rawValue, decimals = 18, maxFractionDigits = 12) {
+  const normalized = formatUnits(rawValue, decimals, maxFractionDigits);
+  return addThousandsSeparatorsToDecimalString(normalized);
 }
 
 function formatTokenDisplayNumber(value) {
@@ -793,63 +807,6 @@ function clearBalanceCache() {
   balancesCache = new Map();
 }
 
-function formatUnits(value, decimals = 18, maxFractionDigits = 12) {
-  const big = typeof value === "bigint" ? value : BigInt(value);
-  const safeDecimals = Number.isFinite(decimals) ? decimals : 18;
-  const base = 10n ** BigInt(safeDecimals);
-  const whole = big / base;
-  const fraction = big % base;
-
-  let wholeStr = whole.toString();
-
-  if (fraction === 0n || maxFractionDigits === 0) {
-    return wholeStr;
-  }
-
-  let fractionStr = fraction.toString().padStart(safeDecimals, "0");
-  fractionStr = fractionStr.replace(/0+$/, "");
-
-  if (!fractionStr) {
-    return wholeStr;
-  }
-
-  if (
-    Number.isFinite(maxFractionDigits) &&
-    maxFractionDigits > 0 &&
-    fractionStr.length > maxFractionDigits
-  ) {
-    fractionStr = fractionStr.slice(0, maxFractionDigits).replace(/0+$/, "");
-  }
-
-  if (!fractionStr) {
-    return wholeStr;
-  }
-
-  return `${wholeStr}.${fractionStr}`;
-}
-
-function addThousandsSeparatorsToDecimalString(value) {
-  const str = String(value || "").trim();
-  if (!str) return "";
-
-  const negative = str.startsWith("-");
-  const unsigned = negative ? str.slice(1) : str;
-
-  const [whole, fraction] = unsigned.split(".");
-  const wholeWithCommas = (whole || "0").replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-
-  if (fraction && fraction.length > 0) {
-    return `${negative ? "-" : ""}${wholeWithCommas}.${fraction}`;
-  }
-
-  return `${negative ? "-" : ""}${wholeWithCommas}`;
-}
-
-function formatTokenDisplayStringFromRaw(rawValue, decimals = 18, maxFractionDigits = 12) {
-  const normalized = formatUnits(rawValue, decimals, maxFractionDigits);
-  return addThousandsSeparatorsToDecimalString(normalized);
-}
-
 async function fetchQuote() {
   const context = getCurrentQuoteContext();
 
@@ -918,12 +875,7 @@ async function fetchQuote() {
     }
 
     const amountOutRaw = BigInt(raw);
-
-    // Keep an exact decimal string for state/fallbacks.
     const formatted = formatUnits(amountOutRaw, decimalsOut, 12);
-
-    // Format for display without converting through Number(...),
-    // so large values and long decimals are not truncated by JS number precision.
     const displayFormatted = formatTokenDisplayStringFromRaw(amountOutRaw, decimalsOut, 12);
 
     latestAppliedQuoteRequestId = requestId;
@@ -1148,7 +1100,7 @@ async function executeSwapPlan() {
   const amountInHuman = String(elements.amountIn.value || "").trim();
 
   if (!walletState.connected || !walletState.address) {
-    setButtonOverride("Connect");
+    setButtonOverride("Get Started");
     updateSwapButtonStateWithBalanceCheck();
     return;
   }
@@ -1315,6 +1267,7 @@ function bindWalletEvents() {
 }
 
 function bindEvents() {
+  /*
   elements.flipButton.addEventListener("click", async () => {
     if (tokensState.length < 2) return;
 
@@ -1336,6 +1289,8 @@ function bindEvents() {
     await fetchQuote();
     updateSwapButtonStateWithBalanceCheck();
   });
+
+  */
 
   elements.connectWalletButton.addEventListener("click", async () => {
     if (walletState.connected) return;
@@ -1471,6 +1426,7 @@ function enableTokenSelectionModal() {
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;");
   }
+
   function renderTokenList(filter = "") {
     const sourceSelect = activeTarget === "in" ? tokenInSelect : tokenOutSelect;
     const options = getSelectOptions(sourceSelect);
@@ -1685,6 +1641,7 @@ async function init() {
   }
 
   updateDisplayedTokenValues();
+  updateSwapButtonStateWithBalanceCheck();
 }
 
 init();
