@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"slices"
 	"sync"
 
 	"github.com/defistate/defistate/clients/chains/katana"
@@ -11,6 +12,8 @@ import (
 	uniswapv3 "github.com/defistate/defistate/protocols/uniswap-v3"
 	uniswapv3math "github.com/defistate/defistate/protocols/uniswap-v3/math"
 )
+
+var ErrNoPathFound = errors.New("no swap path found")
 
 // bigIntPool is a package-level pool for reusing *big.Int objects.
 var bigIntPool = sync.Pool{
@@ -25,7 +28,6 @@ type TokenPoolPath struct {
 	PoolID     uint64
 }
 
-// GetAmountOutFunc is for high-fidelity quoting using big.Int.
 type GetAmountOutFunc func(amountIn *big.Int, tokenInID, tokenOutID uint64) (*big.Int, error)
 type GetReservesFunc func(tokenInID, tokenOutID uint64) (reserveIn, reserveOut *big.Int, err error)
 
@@ -41,14 +43,27 @@ type Router struct {
 func NewRouter(
 	state *katana.State,
 ) (*Router, error) {
-	tokenToIndex := make(map[uint64]int, len(state.Tokens.All()))
-	for i, id := range state.Graph.Tokens {
-		tokenToIndex[id] = i
-	}
+	var tokenToIndex map[uint64]int
+	var poolToIndex map[uint64]int
 
-	poolToIndex := make(map[uint64]int, len(state.Graph.Pools))
-	for i, id := range state.Graph.Pools {
-		poolToIndex[id] = i
+	{
+		//@warning sort tokens and pools only for map creation.
+		// do not use for anythin else!.
+		tokens := append([]uint64(nil), state.Graph.Tokens...)
+		slices.Sort(tokens)
+
+		pools := append([]uint64(nil), state.Graph.Pools...)
+		slices.Sort(pools)
+
+		tokenToIndex = make(map[uint64]int, len(tokens))
+		for i, id := range tokens {
+			tokenToIndex[id] = i
+		}
+
+		poolToIndex = make(map[uint64]int, len(pools))
+		for i, id := range pools {
+			poolToIndex[id] = i
+		}
 	}
 
 	allGetAmountOutFuncs := make([]GetAmountOutFunc, len(state.Graph.Pools))
@@ -364,16 +379,52 @@ type findSwapPathsState struct {
 
 // FindBestSwapPath searches the graph for the most profitable swap path between two tokens.
 // It uses a "copy-and-patch" strategy to handle state overrides.
+
+type PoolOverrides struct {
+	SushiV3 map[uint64]uniswapv3.Pool
+}
+
 func (r *Router) FindBestSwapPath(
+	runs int,
+	amountIn *big.Int,
 	tokenInID uint64,
 	tokenOutID uint64,
-	amountIn *big.Int,
-	runs int,
+	overrides *PoolOverrides,
 ) ([]TokenPoolPath, *big.Int, error) {
 
 	// --- Step 1: Create a temporary, patched slice of swap functions ---
 	getAmountOutFuncs := make([]GetAmountOutFunc, len(r.allGetAmountOutFuncs))
 	copy(getAmountOutFuncs, r.allGetAmountOutFuncs)
+
+	// handle overrides by updating getAmountOutFuncs
+	for _, pool := range overrides.SushiV3 {
+		// override getAmountOut function for that pool
+		poolIndex, exists := r.poolToIndex[pool.IDs.Pool]
+		if !exists {
+			continue
+		}
+		if getAmountOutFuncs[poolIndex] == nil {
+			// pool is inactive skip!
+			continue
+		}
+
+		p := uniswapv3.PoolView{
+			PoolViewMinimal: uniswapv3.PoolViewMinimal{
+				ID:           pool.IDs.Pool,
+				Token0:       pool.IDs.Token0,
+				Token1:       pool.IDs.Token1,
+				Fee:          pool.Fee,
+				TickSpacing:  pool.TickSpacing,
+				Tick:         pool.Tick,
+				Liquidity:    pool.Liquidity,
+				SqrtPriceX96: pool.SqrtPriceX96,
+			},
+			Ticks: pool.Ticks,
+		}
+		getAmountOutFuncs[poolIndex] = func(amountIn *big.Int, tokenInID, tokenOutID uint64) (*big.Int, error) {
+			return uniswapv3math.GetAmountOut(amountIn, nil, tokenInID, p)
+		}
+	}
 
 	// --- Step 2: Initialize and run the pathfinding algorithm ---
 	startIndex, exists := r.tokenToIndex[tokenInID]
@@ -432,10 +483,70 @@ func (r *Router) FindBestSwapPath(
 	// --- Step 3: Reconstruct and return the best path found ---
 	bestPath := state.paths[endIndex]
 	if bestPath == nil {
-		return nil, nil, nil // No path found between the two tokens.
+		return nil, nil, ErrNoPathFound
 	}
 
 	return bestPath, new(big.Int).Set(state.costs[endIndex]), nil
+}
+
+func (r *Router) GetAmountOut(
+	amountIn *big.Int,
+	path []TokenPoolPath,
+	overrides *PoolOverrides,
+) (*big.Int, error) {
+
+	// --- Step 1: Create a temporary, patched slice of swap functions ---
+	getAmountOutFuncs := make([]GetAmountOutFunc, len(r.allGetAmountOutFuncs))
+	copy(getAmountOutFuncs, r.allGetAmountOutFuncs)
+
+	// handle overrides by updating getAmountOutFuncs
+	for _, pool := range overrides.SushiV3 {
+		// override getAmountOut function for that pool
+		poolIndex, exists := r.poolToIndex[pool.IDs.Pool]
+		if !exists {
+			continue
+		}
+		if getAmountOutFuncs[poolIndex] == nil {
+			// pool is inactive skip!
+			continue
+		}
+
+		p := uniswapv3.PoolView{
+			PoolViewMinimal: uniswapv3.PoolViewMinimal{
+				ID:           pool.IDs.Pool,
+				Token0:       pool.IDs.Token0,
+				Token1:       pool.IDs.Token1,
+				Fee:          pool.Fee,
+				TickSpacing:  pool.TickSpacing,
+				Tick:         pool.Tick,
+				Liquidity:    pool.Liquidity,
+				SqrtPriceX96: pool.SqrtPriceX96,
+			},
+			Ticks: pool.Ticks,
+		}
+		getAmountOutFuncs[poolIndex] = func(amountIn *big.Int, tokenInID, tokenOutID uint64) (*big.Int, error) {
+			return uniswapv3math.GetAmountOut(amountIn, nil, tokenInID, p)
+		}
+	}
+
+	amountIn = new(big.Int).Set(amountIn)
+
+	for _, p := range path {
+		poolIndex, ok := r.poolToIndex[p.PoolID]
+		if !ok {
+			return nil, fmt.Errorf("pool %d unknown", p.PoolID)
+		}
+		getAmountOut := getAmountOutFuncs[poolIndex]
+		if getAmountOut == nil {
+			return nil, fmt.Errorf(" getAmountOut not found for pool %d", p.PoolID)
+		}
+		amountOut, err := getAmountOut(amountIn, p.TokenInID, p.TokenInID)
+		if err != nil {
+			return nil, err
+		}
+		amountIn.Set(amountOut)
+	}
+	return amountIn, nil
 }
 
 // findSwapPath is the core Bellman-Ford-like relaxation step for finding the best swap paths.
@@ -494,4 +605,17 @@ func (r *Router) findSwapPath(state *findSwapPathsState, getAmountOutFuncs []Get
 		}
 	}
 	return nil
+}
+
+// equalTokenPoolPaths compares two paths to see if they are identical.
+func EqualTokenPoolPaths(a, b []TokenPoolPath) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].TokenInID != b[i].TokenInID || a[i].TokenOutID != b[i].TokenOutID || a[i].PoolID != b[i].PoolID {
+			return false
+		}
+	}
+	return true
 }
