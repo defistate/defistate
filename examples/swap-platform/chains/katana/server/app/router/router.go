@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"slices"
+	"sort"
 	"sync"
 
 	"github.com/defistate/defistate/clients/chains/katana"
@@ -43,29 +43,16 @@ type Router struct {
 func NewRouter(
 	state *katana.State,
 ) (*Router, error) {
-	var tokenToIndex map[uint64]int
-	var poolToIndex map[uint64]int
 
-	{
-		//@warning sort tokens and pools only for map creation.
-		// do not use for anythin else!.
-		tokens := append([]uint64(nil), state.Graph.Tokens...)
-		slices.Sort(tokens)
-
-		pools := append([]uint64(nil), state.Graph.Pools...)
-		slices.Sort(pools)
-
-		tokenToIndex = make(map[uint64]int, len(tokens))
-		for i, id := range tokens {
-			tokenToIndex[id] = i
-		}
-
-		poolToIndex = make(map[uint64]int, len(pools))
-		for i, id := range pools {
-			poolToIndex[id] = i
-		}
+	tokenToIndex := make(map[uint64]int, len(state.Graph.Tokens))
+	for i, id := range state.Graph.Tokens {
+		tokenToIndex[id] = i
 	}
 
+	poolToIndex := make(map[uint64]int, len(state.Graph.Pools))
+	for i, id := range state.Graph.Pools {
+		poolToIndex[id] = i
+	}
 	allGetAmountOutFuncs := make([]GetAmountOutFunc, len(state.Graph.Pools))
 	allGetReservesFuncs := make([]GetReservesFunc, len(state.Graph.Pools))
 	// set allGetAmountOutFuncs for sushiV3 pools
@@ -384,7 +371,7 @@ type PoolOverrides struct {
 	SushiV3 map[uint64]uniswapv3.Pool
 }
 
-func (r *Router) FindBestSwapPath(
+func (r *Router) FindBestSwapPathGreedy(
 	runs int,
 	amountIn *big.Int,
 	tokenInID uint64,
@@ -489,6 +476,382 @@ func (r *Router) FindBestSwapPath(
 	return bestPath, new(big.Int).Set(state.costs[endIndex]), nil
 }
 
+// findSwapPath is the core Bellman-Ford-like relaxation step for finding the best swap paths.
+func (r *Router) findSwapPath(state *findSwapPathsState, getAmountOutFuncs []GetAmountOutFunc) error {
+	currentIndex := state.current
+	currentCost := state.costs[currentIndex]
+	currentKnown := state.known[currentIndex]
+	currentPath := state.paths[currentIndex]
+	currentTokenID := r.state.Graph.Tokens[currentIndex]
+
+	if currentKnown.IsSet(uint64(currentIndex)) {
+		return errors.New("cycle detected in path history")
+	}
+
+	maxAmountOut := state.temp
+	for _, edgeIndex := range r.state.Graph.Adjacency[currentIndex] {
+		targetIndex := r.state.Graph.EdgeTargets[edgeIndex]
+		if targetIndex == state.start {
+			continue
+		}
+		if currentKnown.IsSet(uint64(targetIndex)) {
+			continue
+		}
+
+		targetTokenID := r.state.Graph.Tokens[targetIndex]
+		bestPoolIndex := -1
+		maxAmountOut.SetUint64(0)
+		for _, poolIndex := range r.state.Graph.EdgePools[edgeIndex] {
+			getAmountOut := getAmountOutFuncs[poolIndex]
+			if getAmountOut == nil {
+				continue
+			}
+
+			amountOut, err := getAmountOut(currentCost, currentTokenID, targetTokenID)
+			if err == nil && amountOut.Cmp(maxAmountOut) == 1 {
+				maxAmountOut.Set(amountOut)
+				bestPoolIndex = poolIndex
+			}
+		}
+
+		if bestPoolIndex == -1 {
+			continue
+
+		}
+		if maxAmountOut.Cmp(state.costs[targetIndex]) == 1 {
+			state.costs[targetIndex].Set(maxAmountOut)
+			poolID := r.state.Graph.Pools[bestPoolIndex]
+			newPath := make([]TokenPoolPath, len(currentPath)+1)
+			copy(newPath, currentPath)
+			newPath[len(currentPath)] = TokenPoolPath{
+				TokenInID:  currentTokenID,
+				TokenOutID: targetTokenID,
+				PoolID:     poolID,
+			}
+			state.paths[targetIndex] = newPath
+			state.known[targetIndex].SetFrom(currentKnown)
+			state.known[targetIndex].Set(uint64(currentIndex))
+		}
+	}
+	return nil
+}
+
+func (r *Router) FindBestSwapPathTopK(
+	runs int,
+	amountIn *big.Int,
+	tokenInID uint64,
+	tokenOutID uint64,
+	overrides *PoolOverrides,
+) ([]TokenPoolPath, *big.Int, error) {
+	if runs <= 0 {
+		return nil, nil, fmt.Errorf("invalid runs: %d", runs)
+	}
+	if amountIn == nil || amountIn.Sign() <= 0 {
+		return nil, nil, ErrNoPathFound
+	}
+
+	const (
+		topK            = 3 // keep top-3 candidates per token per hop
+		topPoolsPerEdge = 2 // preserve top-2 pool choices on each edge
+	)
+
+	// --- Step 1: Create a temporary, patched slice of swap functions ---
+	getAmountOutFuncs := make([]GetAmountOutFunc, len(r.allGetAmountOutFuncs))
+	copy(getAmountOutFuncs, r.allGetAmountOutFuncs)
+
+	if overrides != nil && overrides.SushiV3 != nil {
+		for _, pool := range overrides.SushiV3 {
+			poolIndex, exists := r.poolToIndex[pool.IDs.Pool]
+			if !exists {
+				continue
+			}
+			if getAmountOutFuncs[poolIndex] == nil {
+				continue
+			}
+
+			p := uniswapv3.PoolView{
+				PoolViewMinimal: uniswapv3.PoolViewMinimal{
+					ID:           pool.IDs.Pool,
+					Token0:       pool.IDs.Token0,
+					Token1:       pool.IDs.Token1,
+					Fee:          pool.Fee,
+					TickSpacing:  pool.TickSpacing,
+					Tick:         pool.Tick,
+					Liquidity:    pool.Liquidity,
+					SqrtPriceX96: pool.SqrtPriceX96,
+				},
+				Ticks: pool.Ticks,
+			}
+
+			getAmountOutFuncs[poolIndex] = func(amountIn *big.Int, tokenInID, tokenOutID uint64) (*big.Int, error) {
+				return uniswapv3math.GetAmountOut(amountIn, nil, tokenInID, p)
+			}
+		}
+	}
+
+	startIndex, exists := r.tokenToIndex[tokenInID]
+	if !exists {
+		return nil, nil, fmt.Errorf("start token %d not found in graph", tokenInID)
+	}
+
+	endIndex, exists := r.tokenToIndex[tokenOutID]
+	if !exists {
+		return nil, nil, fmt.Errorf("end token %d not found in graph", tokenOutID)
+	}
+
+	numTokens := len(r.state.Graph.Tokens)
+
+	type candidate struct {
+		amount         *big.Int
+		prevTokenIndex int
+		prevCandIndex  int
+		poolIndex      int
+		ok             bool
+	}
+
+	// layers[hop][tokenIndex] => top-K candidates reaching tokenIndex in exactly hop swaps
+	layers := make([][][]candidate, runs+1)
+	for hop := 0; hop <= runs; hop++ {
+		layers[hop] = make([][]candidate, numTokens)
+	}
+
+	layers[0][startIndex] = []candidate{
+		{
+			amount:         new(big.Int).Set(amountIn),
+			prevTokenIndex: -1,
+			prevCandIndex:  -1,
+			poolIndex:      -1,
+			ok:             true,
+		},
+	}
+
+	// Exact comparison for route quality.
+	betterAmount := func(a, b *big.Int) bool {
+		if a == nil || a.Sign() <= 0 {
+			return false
+		}
+		if b == nil || b.Sign() <= 0 {
+			return true
+		}
+		return a.Cmp(b) > 0
+	}
+
+	candidateLess := func(a, b candidate) bool {
+		// Primary: higher output
+		if betterAmount(a.amount, b.amount) {
+			return true
+		}
+		if betterAmount(b.amount, a.amount) {
+			return false
+		}
+
+		// Deterministic tie-breakers
+		if a.poolIndex != b.poolIndex {
+			return a.poolIndex < b.poolIndex
+		}
+		if a.prevTokenIndex != b.prevTokenIndex {
+			return a.prevTokenIndex < b.prevTokenIndex
+		}
+		return a.prevCandIndex < b.prevCandIndex
+	}
+
+	insertCandidate := func(list []candidate, cand candidate) []candidate {
+		if !cand.ok || cand.amount == nil || cand.amount.Sign() <= 0 {
+			return list
+		}
+
+		// Deduplicate exact predecessor-chain + pool entries
+		for i := range list {
+			if list[i].prevTokenIndex == cand.prevTokenIndex &&
+				list[i].prevCandIndex == cand.prevCandIndex &&
+				list[i].poolIndex == cand.poolIndex {
+				if candidateLess(cand, list[i]) {
+					list[i] = cand
+				}
+				sort.SliceStable(list, func(i, j int) bool {
+					return candidateLess(list[i], list[j])
+				})
+				if len(list) > topK {
+					list = list[:topK]
+				}
+				return list
+			}
+		}
+
+		list = append(list, cand)
+		sort.SliceStable(list, func(i, j int) bool {
+			return candidateLess(list[i], list[j])
+		})
+		if len(list) > topK {
+			list = list[:topK]
+		}
+		return list
+	}
+
+	type poolChoice struct {
+		poolIndex int
+		amountOut *big.Int
+	}
+
+	// --- Step 2: Relax layer by layer ---
+	for hop := 0; hop < runs; hop++ {
+		for currentIndex := 0; currentIndex < numTokens; currentIndex++ {
+			currentTokenID := r.state.Graph.Tokens[currentIndex]
+
+			for candIdx, cand := range layers[hop][currentIndex] {
+				if !cand.ok || cand.amount == nil || cand.amount.Sign() <= 0 {
+					continue
+				}
+
+				prevTokenIndex := cand.prevTokenIndex
+
+				for _, edgeIndex := range r.state.Graph.Adjacency[currentIndex] {
+					targetIndex := r.state.Graph.EdgeTargets[edgeIndex]
+
+					// Suppress immediate A -> B -> A backtracking
+					if prevTokenIndex >= 0 && targetIndex == prevTokenIndex {
+						continue
+					}
+
+					targetTokenID := r.state.Graph.Tokens[targetIndex]
+
+					bestChoices := make([]poolChoice, 0, topPoolsPerEdge)
+
+					tryInsertPoolChoice := func(choice poolChoice) {
+						if choice.amountOut == nil || choice.amountOut.Sign() <= 0 {
+							return
+						}
+						bestChoices = append(bestChoices, choice)
+						sort.SliceStable(bestChoices, func(i, j int) bool {
+							if betterAmount(bestChoices[i].amountOut, bestChoices[j].amountOut) {
+								return true
+							}
+							if betterAmount(bestChoices[j].amountOut, bestChoices[i].amountOut) {
+								return false
+							}
+							return bestChoices[i].poolIndex < bestChoices[j].poolIndex
+						})
+						if len(bestChoices) > topPoolsPerEdge {
+							bestChoices = bestChoices[:topPoolsPerEdge]
+						}
+					}
+
+					for _, poolIndex := range r.state.Graph.EdgePools[edgeIndex] {
+						getAmountOut := getAmountOutFuncs[poolIndex]
+						if getAmountOut == nil {
+							continue
+						}
+
+						amountOut, err := getAmountOut(cand.amount, currentTokenID, targetTokenID)
+						if err != nil || amountOut == nil || amountOut.Sign() <= 0 {
+							continue
+						}
+
+						tryInsertPoolChoice(poolChoice{
+							poolIndex: poolIndex,
+							amountOut: new(big.Int).Set(amountOut),
+						})
+					}
+
+					for _, choice := range bestChoices {
+						nextCand := candidate{
+							amount:         choice.amountOut,
+							prevTokenIndex: currentIndex,
+							prevCandIndex:  candIdx,
+							poolIndex:      choice.poolIndex,
+							ok:             true,
+						}
+						layers[hop+1][targetIndex] = insertCandidate(layers[hop+1][targetIndex], nextCand)
+					}
+				}
+			}
+		}
+	}
+
+	// --- Step 3: Pick best end candidate across all hops ---
+	bestHop := -1
+	bestCandIndex := -1
+	var bestCand candidate
+
+	for hop := 1; hop <= runs; hop++ {
+		for candIdx, cand := range layers[hop][endIndex] {
+			if !cand.ok || cand.amount == nil || cand.amount.Sign() <= 0 {
+				continue
+			}
+
+			if bestHop == -1 {
+				bestHop = hop
+				bestCandIndex = candIdx
+				bestCand = cand
+				continue
+			}
+
+			if betterAmount(cand.amount, bestCand.amount) {
+				bestHop = hop
+				bestCandIndex = candIdx
+				bestCand = cand
+				continue
+			}
+
+			if cand.amount.Cmp(bestCand.amount) == 0 {
+				// Prefer fewer hops on exact ties
+				if hop < bestHop {
+					bestHop = hop
+					bestCandIndex = candIdx
+					bestCand = cand
+					continue
+				}
+				if hop == bestHop && candidateLess(cand, bestCand) {
+					bestHop = hop
+					bestCandIndex = candIdx
+					bestCand = cand
+				}
+			}
+		}
+	}
+
+	if bestHop == -1 || bestCand.amount == nil || bestCand.amount.Sign() <= 0 {
+		return nil, nil, ErrNoPathFound
+	}
+
+	// --- Step 4: Reconstruct path ---
+	path := make([]TokenPoolPath, 0, bestHop)
+	currentTokenIndex := endIndex
+	currentHop := bestHop
+	currentCandIndex := bestCandIndex
+
+	for currentHop > 0 {
+		cands := layers[currentHop][currentTokenIndex]
+		if currentCandIndex < 0 || currentCandIndex >= len(cands) {
+			return nil, nil, fmt.Errorf("path reconstruction failed at hop %d tokenIndex %d", currentHop, currentTokenIndex)
+		}
+
+		cand := cands[currentCandIndex]
+		if !cand.ok || cand.prevTokenIndex < 0 || cand.poolIndex < 0 {
+			return nil, nil, fmt.Errorf("invalid predecessor at hop %d tokenIndex %d", currentHop, currentTokenIndex)
+		}
+
+		prevIndex := cand.prevTokenIndex
+		poolIndex := cand.poolIndex
+
+		path = append(path, TokenPoolPath{
+			TokenInID:  r.state.Graph.Tokens[prevIndex],
+			TokenOutID: r.state.Graph.Tokens[currentTokenIndex],
+			PoolID:     r.state.Graph.Pools[poolIndex],
+		})
+
+		currentTokenIndex = prevIndex
+		currentCandIndex = cand.prevCandIndex
+		currentHop--
+	}
+
+	for i, j := 0, len(path)-1; i < j; i, j = i+1, j-1 {
+		path[i], path[j] = path[j], path[i]
+	}
+
+	return path, new(big.Int).Set(bestCand.amount), nil
+}
+
 func (r *Router) GetAmountOut(
 	amountIn *big.Int,
 	path []TokenPoolPath,
@@ -547,64 +910,6 @@ func (r *Router) GetAmountOut(
 		amountIn.Set(amountOut)
 	}
 	return amountIn, nil
-}
-
-// findSwapPath is the core Bellman-Ford-like relaxation step for finding the best swap paths.
-func (r *Router) findSwapPath(state *findSwapPathsState, getAmountOutFuncs []GetAmountOutFunc) error {
-	currentIndex := state.current
-	currentCost := state.costs[currentIndex]
-	currentKnown := state.known[currentIndex]
-	currentPath := state.paths[currentIndex]
-	currentTokenID := r.state.Graph.Tokens[currentIndex]
-
-	if currentKnown.IsSet(uint64(currentIndex)) {
-		return errors.New("cycle detected in path history")
-	}
-
-	maxAmountOut := state.temp
-	for _, edgeIndex := range r.state.Graph.Adjacency[currentIndex] {
-		targetIndex := r.state.Graph.EdgeTargets[edgeIndex]
-
-		if currentKnown.IsSet(uint64(targetIndex)) {
-			continue
-		}
-
-		targetTokenID := r.state.Graph.Tokens[targetIndex]
-		bestPoolIndex := -1
-		maxAmountOut.SetUint64(0)
-		for _, poolIndex := range r.state.Graph.EdgePools[edgeIndex] {
-			getAmountOut := getAmountOutFuncs[poolIndex]
-			if getAmountOut == nil {
-				continue
-			}
-
-			amountOut, err := getAmountOut(currentCost, currentTokenID, targetTokenID)
-			if err == nil && amountOut.Cmp(maxAmountOut) == 1 {
-				maxAmountOut.Set(amountOut)
-				bestPoolIndex = poolIndex
-			}
-		}
-
-		if bestPoolIndex == -1 {
-			continue
-
-		}
-		if maxAmountOut.Cmp(state.costs[targetIndex]) == 1 {
-			state.costs[targetIndex].Set(maxAmountOut)
-			poolID := r.state.Graph.Pools[bestPoolIndex]
-			newPath := make([]TokenPoolPath, len(currentPath)+1)
-			copy(newPath, currentPath)
-			newPath[len(currentPath)] = TokenPoolPath{
-				TokenInID:  currentTokenID,
-				TokenOutID: targetTokenID,
-				PoolID:     poolID,
-			}
-			state.paths[targetIndex] = newPath
-			state.known[targetIndex].SetFrom(currentKnown)
-			state.known[targetIndex].Set(uint64(currentIndex))
-		}
-	}
-	return nil
 }
 
 // equalTokenPoolPaths compares two paths to see if they are identical.
