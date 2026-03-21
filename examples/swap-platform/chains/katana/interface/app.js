@@ -11,8 +11,8 @@ const SUSHI_TOKEN_LOGO_BASE =
 
 const DEFAULT_TOKEN_IMAGE = "/public/token-default.svg";
 
-const QUOTE_DEBOUNCE_MS = 200;
-const QUOTE_REFRESH_MS = 200;
+const QUOTE_DEBOUNCE_MS = 1000;
+const QUOTE_REFRESH_MS = 1000;
 const PRICES_REFRESH_MS = 10000;
 const MAX_ALLOWED_PRICE_IMPACT = 15;
 
@@ -793,6 +793,63 @@ function clearBalanceCache() {
   balancesCache = new Map();
 }
 
+function formatUnits(value, decimals = 18, maxFractionDigits = 12) {
+  const big = typeof value === "bigint" ? value : BigInt(value);
+  const safeDecimals = Number.isFinite(decimals) ? decimals : 18;
+  const base = 10n ** BigInt(safeDecimals);
+  const whole = big / base;
+  const fraction = big % base;
+
+  let wholeStr = whole.toString();
+
+  if (fraction === 0n || maxFractionDigits === 0) {
+    return wholeStr;
+  }
+
+  let fractionStr = fraction.toString().padStart(safeDecimals, "0");
+  fractionStr = fractionStr.replace(/0+$/, "");
+
+  if (!fractionStr) {
+    return wholeStr;
+  }
+
+  if (
+    Number.isFinite(maxFractionDigits) &&
+    maxFractionDigits > 0 &&
+    fractionStr.length > maxFractionDigits
+  ) {
+    fractionStr = fractionStr.slice(0, maxFractionDigits).replace(/0+$/, "");
+  }
+
+  if (!fractionStr) {
+    return wholeStr;
+  }
+
+  return `${wholeStr}.${fractionStr}`;
+}
+
+function addThousandsSeparatorsToDecimalString(value) {
+  const str = String(value || "").trim();
+  if (!str) return "";
+
+  const negative = str.startsWith("-");
+  const unsigned = negative ? str.slice(1) : str;
+
+  const [whole, fraction] = unsigned.split(".");
+  const wholeWithCommas = (whole || "0").replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+
+  if (fraction && fraction.length > 0) {
+    return `${negative ? "-" : ""}${wholeWithCommas}.${fraction}`;
+  }
+
+  return `${negative ? "-" : ""}${wholeWithCommas}`;
+}
+
+function formatTokenDisplayStringFromRaw(rawValue, decimals = 18, maxFractionDigits = 12) {
+  const normalized = formatUnits(rawValue, decimals, maxFractionDigits);
+  return addThousandsSeparatorsToDecimalString(normalized);
+}
+
 async function fetchQuote() {
   const context = getCurrentQuoteContext();
 
@@ -861,12 +918,18 @@ async function fetchQuote() {
     }
 
     const amountOutRaw = BigInt(raw);
-    const formatted = formatUnits(amountOutRaw, decimalsOut);
+
+    // Keep an exact decimal string for state/fallbacks.
+    const formatted = formatUnits(amountOutRaw, decimalsOut, 12);
+
+    // Format for display without converting through Number(...),
+    // so large values and long decimals are not truncated by JS number precision.
+    const displayFormatted = formatTokenDisplayStringFromRaw(amountOutRaw, decimalsOut, 12);
 
     latestAppliedQuoteRequestId = requestId;
     lastSettledQuote = formatted;
     lastQuoteSignature = signature;
-    elements.amountOut.value = formatTokenDisplayNumber(Number(formatted));
+    elements.amountOut.value = displayFormatted;
     updateDisplayedTokenValues();
   } catch (error) {
     console.error("quote failed:", error);
@@ -876,7 +939,7 @@ async function fetchQuote() {
 
     if (isStillCurrent && lastSettledQuote && lastQuoteSignature === signature) {
       latestAppliedQuoteRequestId = requestId;
-      elements.amountOut.value = formatTokenDisplayNumber(Number(lastSettledQuote));
+      elements.amountOut.value = addThousandsSeparatorsToDecimalString(lastSettledQuote);
     } else if (isStillCurrent) {
       elements.amountOut.value = "";
       clearPriceImpactDisplay();
