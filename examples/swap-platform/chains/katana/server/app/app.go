@@ -14,8 +14,14 @@ import (
 	ethclients "github.com/defistate/defistate/clients/eth-clients"
 	"github.com/defistate/defistate/examples/swap-platform/chains/katana/server/app/router"
 	token "github.com/defistate/defistate/protocols/erc20-token-system"
+	uniswapv3 "github.com/defistate/defistate/protocols/uniswap-v3"
+	uniswapv3math "github.com/defistate/defistate/protocols/uniswap-v3/math"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+)
+
+const (
+	DefaultFindBestSwapPathRuns = 3
 )
 
 type Platform struct {
@@ -27,7 +33,11 @@ type Platform struct {
 	prices           map[common.Address]float64
 	quoteToken       common.Address
 	quoteTokenAmount *big.Int
-	mu               sync.RWMutex
+
+	maxQuoteValuePerFragment *big.Int
+	maxFragments             int
+
+	mu sync.RWMutex
 }
 
 func NewPlatform(
@@ -36,13 +46,17 @@ func NewPlatform(
 	quoteToken common.Address,
 	swapAddress common.Address,
 	rpc ethclients.ETHClient,
+	maxQuoteValuePerFragment *big.Int,
+	maxFragments int,
 ) *Platform {
 	p := &Platform{
-		rpc:              rpc,
-		swapAddress:      swapAddress,
-		quoteToken:       quoteToken,
-		quoteTokenAmount: quoteTokenAmount,
-		prices:           make(map[common.Address]float64),
+		rpc:                      rpc,
+		swapAddress:              swapAddress,
+		quoteToken:               quoteToken,
+		quoteTokenAmount:         quoteTokenAmount,
+		maxQuoteValuePerFragment: maxQuoteValuePerFragment,
+		maxFragments:             maxFragments,
+		prices:                   make(map[common.Address]float64),
 	}
 
 	go p.loop(ctx, time.NewTicker(10*time.Second))
@@ -147,45 +161,266 @@ func (p *Platform) Prices() (prices map[common.Address]float64, quoteToken commo
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	if p.prices == nil {
+	if len(p.prices) == 0 {
 		return nil, common.Address{}, errors.New("prices unavailable")
 	}
 	return p.prices, p.quoteToken, nil
+}
+func (p *Platform) WaitForPrices(
+	ctx context.Context,
+	timeout time.Duration,
+	requiredTokens ...common.Address,
+) error {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("timeout waiting for prices: %w", ctx.Err())
+
+		case <-ticker.C:
+			prices, _, err := p.Prices()
+			if err != nil {
+				continue
+			}
+
+			// must have at least one price
+			if len(prices) == 0 {
+				continue
+			}
+
+			ok := true
+			for _, token := range requiredTokens {
+				if _, exists := prices[token]; !exists {
+					ok = false
+					break
+				}
+			}
+
+			if ok {
+				return nil
+			}
+		}
+	}
+}
+func (p *Platform) getFragments(
+	amount *big.Int,
+	tokenAddress common.Address,
+) (int, error) {
+	if amount == nil || amount.Sign() <= 0 {
+		return 0, fmt.Errorf("invalid amount")
+	}
+	if p.maxFragments <= 0 {
+		return 0, fmt.Errorf("invalid maxFragments: %d", p.maxFragments)
+	}
+	if p.maxQuoteValuePerFragment == nil || p.maxQuoteValuePerFragment.Sign() <= 0 {
+		return 0, errors.New("invalid maxQuoteValuePerFragment")
+	}
+
+	state := p.state.Load()
+	if state == nil {
+		return 0, errors.New("state unavailable")
+	}
+
+	tokenIn, ok := state.Tokens.GetByAddress(tokenAddress)
+	if !ok {
+		return 0, fmt.Errorf("token %s not found", tokenAddress.Hex())
+	}
+
+	quoteToken, ok := state.Tokens.GetByAddress(p.quoteToken)
+	if !ok {
+		return 0, fmt.Errorf("quote token %s not found", p.quoteToken.Hex())
+	}
+
+	var quoteValueRaw *big.Int
+
+	// If token is already the quote token, value is just the raw amount.
+	if tokenAddress == p.quoteToken {
+		quoteValueRaw = new(big.Int).Set(amount)
+	} else {
+		prices, _, err := p.Prices()
+		if err != nil {
+			return 0, err
+		}
+
+		price, ok := prices[tokenAddress]
+		if !ok || price <= 0 {
+			return 0, fmt.Errorf("price unavailable for token %s", tokenAddress.Hex())
+		}
+
+		// quoteValueRaw =
+		//   amountRaw * price * 10^quoteDecimals / 10^tokenDecimals
+		amountF := new(big.Float).SetInt(amount)
+		priceF := big.NewFloat(price)
+
+		tokenScale := new(big.Float).SetInt(
+			new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(tokenIn.Decimals)), nil),
+		)
+		quoteScale := new(big.Float).SetInt(
+			new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(quoteToken.Decimals)), nil),
+		)
+
+		quoteValueF := new(big.Float).Mul(amountF, priceF)
+		quoteValueF.Mul(quoteValueF, quoteScale)
+		quoteValueF.Quo(quoteValueF, tokenScale)
+
+		quoteValueRaw, _ = quoteValueF.Int(nil)
+		if quoteValueRaw == nil {
+			return 0, errors.New("unable to compute quote value")
+		}
+	}
+
+	// fragments = ceil(quoteValueRaw / maxQuoteValuePerFragment)
+	fragments := new(big.Int).Add(
+		quoteValueRaw,
+		new(big.Int).Sub(new(big.Int).Set(p.maxQuoteValuePerFragment), big.NewInt(1)),
+	)
+	fragments.Div(fragments, p.maxQuoteValuePerFragment)
+	if !fragments.IsInt64() {
+		return p.maxFragments, nil
+	}
+
+	n := int(fragments.Int64())
+	if n < 1 {
+		n = 1
+	}
+	if n > p.maxFragments {
+		n = p.maxFragments
+	}
+	return n, nil
+}
+
+func (p *Platform) QuoteAlgorithm(
+	tokenIn common.Address,
+	tokenOut common.Address,
+	amountIn *big.Int,
+	maxFragments int,
+) (paths [][]router.TokenPoolPath, amountsIn []*big.Int, amountsOut []*big.Int, err error) {
+	if maxFragments <= 0 {
+		return nil, nil, nil, fmt.Errorf("invalid maxFragments: %d", maxFragments)
+	}
+
+	state := p.state.Load()
+	rt := p.router.Load()
+
+	if state == nil || rt == nil {
+		return nil, nil, nil, errors.New("state unavailable")
+	}
+
+	tIn, ok := state.Tokens.GetByAddress(tokenIn)
+	if !ok {
+		return nil, nil, nil, fmt.Errorf("tokenIn %s not found", tokenIn.Hex())
+	}
+
+	tOut, ok := state.Tokens.GetByAddress(tokenOut)
+	if !ok {
+		return nil, nil, nil, fmt.Errorf("tokenOut %s not found", tokenOut.Hex())
+	}
+
+	amountInPerFragment := new(big.Int).Div(amountIn, big.NewInt(int64(maxFragments)))
+	amountInRemainder := new(big.Int).Mod(amountIn, big.NewInt(int64(maxFragments)))
+
+	// else, use all fragments
+	paths = [][]router.TokenPoolPath{}
+	amountsIn = []*big.Int{}
+	amountsOut = []*big.Int{}
+	overrides := &router.PoolOverrides{}
+
+	fragmentAmounts := make([]*big.Int, 0, maxFragments)
+	// base fragments
+	for i := 0; i < maxFragments; i++ {
+		if amountInPerFragment.Sign() > 0 {
+			fragmentAmounts = append(fragmentAmounts, new(big.Int).Set(amountInPerFragment))
+		}
+	}
+
+	// handle remainder
+	if amountInRemainder.Sign() > 0 {
+		// threshold = 25% of a normal fragment
+		threshold := new(big.Int).Div(amountInPerFragment, big.NewInt(4))
+
+		if amountInRemainder.Cmp(threshold) >= 0 {
+			// significant → keep as its own fragment
+			fragmentAmounts = append(fragmentAmounts, new(big.Int).Set(amountInRemainder))
+		} else if len(fragmentAmounts) > 0 {
+			// too small → merge into last fragment
+			fragmentAmounts[len(fragmentAmounts)-1].Add(
+				fragmentAmounts[len(fragmentAmounts)-1],
+				amountInRemainder,
+			)
+		}
+	}
+
+	for _, fragment := range fragmentAmounts {
+		pathFragment, amountOutFragment, err := rt.FindBestSwapPath(
+			DefaultFindBestSwapPathRuns,
+			fragment,
+			tIn.ID,
+			tOut.ID,
+			overrides,
+		)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		overrides, err = getOverrides(
+			fragment,
+			pathFragment,
+			overrides,
+			state,
+		)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		duplicatePath := false
+		for i, prevPath := range paths {
+			if router.EqualTokenPoolPaths(prevPath, pathFragment) {
+				duplicatePath = true
+				amountsIn[i].Add(amountsIn[i], fragment)
+				amountsOut[i].Add(amountsOut[i], amountOutFragment)
+				break
+			}
+		}
+
+		if !duplicatePath {
+			paths = append(paths, pathFragment)
+			amountsIn = append(amountsIn, new(big.Int).Set(fragment))
+			amountsOut = append(amountsOut, amountOutFragment)
+		}
+	}
+	return paths, amountsIn, amountsOut, nil
 }
 
 func (p *Platform) Quote(
 	tokenIn common.Address,
 	tokenOut common.Address,
 	amountIn *big.Int,
-) (amountOut *big.Int, err error) {
-	state := p.state.Load()
-	rt := p.router.Load()
-
-	if state == nil || rt == nil {
-		return nil, errors.New("state unavailable")
+) (*big.Int, error) {
+	fragments, err := p.getFragments(amountIn, tokenIn)
+	if err != nil {
+		return nil, err
 	}
+	_, _, amountsOut, err := p.QuoteAlgorithm(
+		tokenIn,
+		tokenOut,
+		amountIn,
+		fragments,
+	)
 
-	// 1. Resolve tokenIn address to ID
-	tIn, ok := state.Tokens.GetByAddress(tokenIn)
-	if !ok {
-		return nil, fmt.Errorf("tokenIn %s not found", tokenIn.Hex())
-	}
-
-	// 2. Resolve tokenOut address to ID
-	tOut, ok := state.Tokens.GetByAddress(tokenOut)
-	if !ok {
-		return nil, fmt.Errorf("tokenOut %s not found", tokenOut.Hex())
-	}
-
-	// 3. Find the best path (using 4 runs/hops as a standard DeFi depth)
-	_, amountOut, err = rt.FindBestSwapPath(tIn.ID, tOut.ID, amountIn, 4)
 	if err != nil {
 		return nil, err
 	}
 
-	if amountOut == nil {
-		return new(big.Int), nil
+	amountOut := new(big.Int)
+	for _, b := range amountsOut {
+		amountOut.Add(amountOut, b)
 	}
+
 	return amountOut, nil
 }
 
@@ -203,33 +438,24 @@ func (p *Platform) Swap(
 	tokenOut common.Address,
 	amountIn *big.Int,
 ) (txs []Transaction, err error) {
-	state := p.state.Load()
-	rt := p.router.Load()
-
-	if state == nil || rt == nil {
-		return nil, errors.New("state unavailable")
+	fragments, err := p.getFragments(amountIn, tokenIn)
+	if err != nil {
+		return nil, err
 	}
+	paths, amountsIn, amountsOut, err := p.QuoteAlgorithm(
+		tokenIn,
+		tokenOut,
+		amountIn,
+		fragments,
+	)
 
-	// 1. Resolve tokenIn address to ID
-	tIn, ok := state.Tokens.GetByAddress(tokenIn)
-	if !ok {
-		return nil, fmt.Errorf("tokenIn %s not found", tokenIn.Hex())
-	}
-
-	// 2. Resolve tokenOut address to ID
-	tOut, ok := state.Tokens.GetByAddress(tokenOut)
-	if !ok {
-		return nil, fmt.Errorf("tokenOut %s not found", tokenOut.Hex())
-	}
-
-	// 3. Find the best path (using 4 runs/hops as a standard DeFi depth)
-	path, amountOut, err := rt.FindBestSwapPath(tIn.ID, tOut.ID, amountIn, 4)
 	if err != nil {
 		return nil, err
 	}
 
-	if path == nil || amountOut == nil || amountOut.Sign() == 0 {
-		return nil, errors.New("no route found with positive output")
+	amountOut := new(big.Int)
+	for _, b := range amountsOut {
+		amountOut.Add(amountOut, b)
 	}
 
 	allowance, err := getERC20TokenAllowance(
@@ -257,23 +483,47 @@ func (p *Platform) Swap(
 			Value: (*hexutil.Big)(new(big.Int)),
 		}
 		txs = append(txs, approveTx)
-	}
 
-	swapData, gas, err := p.generateSwapData(
-		amountIn,
-		tokenIn,
-		tokenOut,
-		receiver,
-		path,
-	)
+	}
 
 	if err != nil {
 		return nil, err
 	}
 
+	swapData := make([][]byte, len(paths))
+	gas := new(big.Int)
+
+	// gather swap data
+	for i, path := range paths {
+		var g *big.Int
+		swapData[i], g, err = p.generateSwapData(path, receiver)
+		if err != nil {
+			return nil, err
+		}
+		gas.Add(gas, g)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	// @todo add slippage
+	data, err := getTransferFromAndSwapBatchWithMinOut(
+		amountIn,
+		amountsIn,
+		amountOut,
+		tokenIn,
+		tokenOut,
+		receiver,
+		swapData,
+	)
+
+	if err != nil {
+		return nil, err
+	}
 	swapTx := Transaction{
 		To:    p.swapAddress,
-		Data:  hexutil.Bytes(swapData),
+		Data:  hexutil.Bytes(data),
 		Gas:   (*hexutil.Big)(gas),
 		Value: (*hexutil.Big)(new(big.Int)),
 	}
@@ -283,11 +533,8 @@ func (p *Platform) Swap(
 }
 
 func (p *Platform) generateSwapData(
-	amountIn *big.Int,
-	tokenIn common.Address,
-	tokenOut common.Address,
-	receiver common.Address,
 	path []router.TokenPoolPath,
+	receiver common.Address,
 ) (swapData []byte, gas *big.Int, err error) {
 	state := p.state.Load()
 
@@ -366,17 +613,106 @@ func (p *Platform) generateSwapData(
 		return nil, nil, errors.New("could not generate swap data for path")
 	}
 
-	swapData, err = getTransferFromAndSwapData(
-		amountIn,
-		tokenIn,
-		tokenOut,
-		receiver,
-		mergeSwapData(allSwapData),
-	)
-	if err != nil {
-		return nil, nil, err
+	gas = totalGas
+	return mergeSwapData(allSwapData), gas, nil
+}
+
+func getOverrides(amountIn *big.Int, paths []router.TokenPoolPath, prevOverrides *router.PoolOverrides, state *katana.State) (*router.PoolOverrides, error) {
+	// ensure we do not mutate inputs
+	amountIn = new(big.Int).Set(amountIn)
+	overrides := copyOverrides(prevOverrides)
+	for _, path := range paths {
+		poolID := path.PoolID
+		// @todo we need Index.HasPool(uint64) functions
+		// but for now, sushiV3 is the only protocol so we can use this
+
+		// first check overrides
+		var (
+			pool uniswapv3.Pool
+			ok   bool
+		)
+
+		if overrides.SushiV3 != nil {
+			pool, ok = overrides.SushiV3[poolID]
+			if !ok {
+				pool, ok = state.SushiV3.GetByID(poolID)
+				if !ok {
+					return nil, fmt.Errorf("pool %d not found in SushiV3", poolID)
+				}
+			}
+		} else {
+			pool, ok = state.SushiV3.GetByID(poolID)
+			if !ok {
+				return nil, fmt.Errorf("pool %d not found in SushiV3", poolID)
+			}
+		}
+
+		amountOut, u, err := uniswapv3math.SimulateExactInSwap(
+			amountIn,
+			nil,
+			path.TokenInID,
+			uniswapv3.PoolView{
+				PoolViewMinimal: uniswapv3.PoolViewMinimal{
+					ID:           pool.IDs.Pool,
+					Token0:       pool.IDs.Token0,
+					Token1:       pool.IDs.Token1,
+					Fee:          pool.Fee,
+					TickSpacing:  pool.TickSpacing,
+					Tick:         pool.Tick,
+					Liquidity:    pool.Liquidity,
+					SqrtPriceX96: pool.SqrtPriceX96,
+				},
+				Ticks: pool.Ticks,
+			},
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		//update amountIn
+		amountIn.Set(amountOut)
+		// set updated pool
+		updatedPool := pool
+		updatedPool.Tick = u.Tick
+		updatedPool.Liquidity = u.Liquidity
+		updatedPool.SqrtPriceX96 = u.SqrtPriceX96
+		updatedPool.Ticks = u.Ticks
+		if overrides.SushiV3 == nil {
+			overrides.SushiV3 = make(map[uint64]uniswapv3.Pool)
+		}
+		overrides.SushiV3[pool.IDs.Pool] = updatedPool
+
 	}
 
-	gas = totalGas
-	return swapData, gas, nil
+	return overrides, nil
+
+}
+
+func copyOverrides(old *router.PoolOverrides) *router.PoolOverrides {
+	if old == nil {
+		return &router.PoolOverrides{}
+	}
+	nw := &router.PoolOverrides{
+		SushiV3: make(map[uint64]uniswapv3.Pool),
+	}
+
+	if old.SushiV3 != nil {
+		for id, pool := range old.SushiV3 {
+			nw.SushiV3[id] = uniswapv3.Pool{
+				Protocol:     pool.Protocol,
+				IDs:          pool.IDs,
+				Address:      pool.Address,
+				Token0:       pool.Token0,
+				Token1:       pool.Token1,
+				Fee:          pool.Fee,
+				TickSpacing:  pool.TickSpacing,
+				Liquidity:    new(big.Int).Set(pool.Liquidity),
+				SqrtPriceX96: new(big.Int).Set(pool.SqrtPriceX96),
+				Tick:         pool.Tick,
+				Ticks:        pool.Ticks, // we use a shallow copy here
+			}
+		}
+	}
+
+	return nw
 }

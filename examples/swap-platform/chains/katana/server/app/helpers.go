@@ -33,7 +33,7 @@ func init() {
 		panic(err)
 	}
 
-	swapABI, err = abi.JSON(strings.NewReader(`[{"inputs":[{"internalType":"address","name":"_WETH","type":"address"}],"stateMutability":"nonpayable","type":"constructor"},{"stateMutability":"nonpayable","type":"fallback"},{"inputs":[{"internalType":"bytes","name":"data","type":"bytes"}],"name":"conditional","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"enumSwapTypes","name":"swapType","type":"uint8"}],"name":"getCalcSwapContract","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"_token","type":"address"}],"name":"getCash","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"enumSwapTypes","name":"swapType","type":"uint8"}],"name":"getConditionalContract","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"enumSwapTypes","name":"swapType","type":"uint8"}],"name":"getSwapContract","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"enumSwapTypes","name":"swapType","type":"uint8"},{"internalType":"address","name":"contractAddress","type":"address"}],"name":"setCalcSwapContract","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"enumSwapTypes","name":"swapType","type":"uint8"},{"internalType":"address","name":"contractAddress","type":"address"}],"name":"setConditionalContract","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"enumSwapTypes","name":"swapType","type":"uint8"},{"internalType":"address","name":"contractAddress","type":"address"}],"name":"setSwapContract","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"initialAmount","type":"uint256"},{"internalType":"bytes","name":"swapData","type":"bytes"},{"internalType":"address","name":"tokenOutAddress","type":"address"},{"internalType":"address","name":"receiver","type":"address"}],"name":"swap","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"initialAmount","type":"uint256"},{"internalType":"bytes","name":"swapData","type":"bytes"},{"internalType":"address","name":"tokenOutAddress","type":"address"},{"internalType":"address","name":"receiver","type":"address"},{"internalType":"uint256","name":"minOut","type":"uint256"}],"name":"swapWithMinOut","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"initialAmount","type":"uint256"},{"internalType":"address","name":"tokenInAdress","type":"address"},{"internalType":"address","name":"tokenOutAddress","type":"address"},{"internalType":"address","name":"receiver","type":"address"},{"internalType":"bytes","name":"swapData","type":"bytes"}],"name":"transferFromAndSwap","outputs":[],"stateMutability":"nonpayable","type":"function"},{"stateMutability":"payable","type":"receive"}]`))
+	swapABI, err = abi.JSON(strings.NewReader(`[{"inputs":[{"internalType":"address","name":"_WETH","type":"address"}],"stateMutability":"nonpayable","type":"constructor"},{"stateMutability":"nonpayable","type":"fallback"},{"inputs":[{"internalType":"bytes","name":"data","type":"bytes"}],"name":"conditional","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"enumSwapTypes","name":"swapType","type":"uint8"}],"name":"getCalcSwapContract","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"_token","type":"address"}],"name":"getCash","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"enumSwapTypes","name":"swapType","type":"uint8"}],"name":"getConditionalContract","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"enumSwapTypes","name":"swapType","type":"uint8"}],"name":"getSwapContract","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"enumSwapTypes","name":"swapType","type":"uint8"},{"internalType":"address","name":"contractAddress","type":"address"}],"name":"setCalcSwapContract","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"enumSwapTypes","name":"swapType","type":"uint8"},{"internalType":"address","name":"contractAddress","type":"address"}],"name":"setConditionalContract","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"enumSwapTypes","name":"swapType","type":"uint8"},{"internalType":"address","name":"contractAddress","type":"address"}],"name":"setSwapContract","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"initialAmount","type":"uint256"},{"internalType":"bytes","name":"swapData","type":"bytes"},{"internalType":"address","name":"tokenOutAddress","type":"address"},{"internalType":"address","name":"receiver","type":"address"}],"name":"swap","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"initialAmount","type":"uint256"},{"internalType":"bytes","name":"swapData","type":"bytes"},{"internalType":"address","name":"tokenOutAddress","type":"address"},{"internalType":"address","name":"receiver","type":"address"},{"internalType":"uint256","name":"minOut","type":"uint256"}],"name":"swapWithMinOut","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"totalAmountIn","type":"uint256"},{"internalType":"uint256[]","name":"amountsIn","type":"uint256[]"},{"internalType":"bytes[]","name":"swapData","type":"bytes[]"},{"internalType":"address","name":"tokenInAddress","type":"address"},{"internalType":"address","name":"tokenOutAddress","type":"address"},{"internalType":"address","name":"receiver","type":"address"},{"internalType":"uint256","name":"minOut","type":"uint256"}],"name":"transferFromAndSwapBatchWithMinOut","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"nonpayable","type":"function"},{"stateMutability":"payable","type":"receive"}]`))
 	if err != nil {
 		panic(err)
 	}
@@ -339,24 +339,24 @@ func getERC20ApproveData(
 	return data, nil
 }
 
-func getTransferFromAndSwapData(
-	initialAmount *big.Int,
+func getTransferFromAndSwapBatchWithMinOut(
+	totalAmountIn *big.Int,
+	amountsIn []*big.Int,
+	minAmountOut *big.Int,
 	tokenInAddress common.Address,
 	tokenOutAddress common.Address,
 	receiver common.Address,
-	swapData []byte,
+	swapData [][]byte,
 ) ([]byte, error) {
-	if initialAmount == nil {
-		initialAmount = new(big.Int)
-	}
-
 	data, err := swapABI.Pack(
-		"transferFromAndSwap",
-		initialAmount,
+		"transferFromAndSwapBatchWithMinOut",
+		totalAmountIn,
+		amountsIn,
+		swapData,
 		tokenInAddress,
 		tokenOutAddress,
 		receiver,
-		swapData,
+		minAmountOut,
 	)
 	if err != nil {
 		return nil, err
