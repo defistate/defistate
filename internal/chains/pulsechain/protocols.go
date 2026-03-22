@@ -33,8 +33,8 @@ const (
 	DefaultTickIndexerUpdateFrequency = 10 * time.Second
 
 	// Log settings for retry logic (0 means disabled/default).
-	DefaultLogMaxRetries = 0
-	DefaultLogRetryDelay = 0
+	DefaultLogMaxRetries = 20
+	DefaultLogRetryDelay = 50 * time.Millisecond
 )
 
 // MakePulsechainProtocols initializes all protocols for the Ethereum Mainnet.

@@ -33,8 +33,8 @@ const (
 	DefaultTickIndexerUpdateFrequency = 10 * time.Second
 
 	// Log settings for retry logic (0 means disabled/default).
-	DefaultLogMaxRetries = 0
-	DefaultLogRetryDelay = 0
+	DefaultLogMaxRetries = 10
+	DefaultLogRetryDelay = 50 * time.Millisecond
 )
 
 // MakeCeloProtocols initializes all protocols for the Celo Mainnet.

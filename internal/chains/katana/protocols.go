@@ -30,8 +30,8 @@ const (
 	DefaultTickIndexerUpdateFrequency = 10 * time.Second
 
 	// Log settings for retry logic (0 means disabled/default).
-	DefaultLogMaxRetries = 8
-	DefaultLogRetryDelay = 25 * time.Millisecond
+	DefaultLogMaxRetries = 10
+	DefaultLogRetryDelay = 50 * time.Millisecond
 )
 
 // MakeKatanaProtocols initializes all protocols for the Katana Mainnet.
