@@ -356,7 +356,7 @@ func (p *Platform) QuoteAlgorithm(
 	}
 
 	for _, fragment := range fragmentAmounts {
-		pathFragment, amountOutFragment, err := rt.FindBestSwapPathTopK(
+		pathFragment, amountOutFragment, err := rt.FindBestSwapPathGreedy(
 			DefaultFindBestSwapPathRuns,
 			fragment,
 			tIn.ID,
