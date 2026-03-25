@@ -1,0 +1,977 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, viewport-fit=cover"
+  />
+  <meta name="theme-color" content="#f7f3ea" />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Celo Flow" />
+  <meta
+    name="twitter:description"
+    content="Move between dollars, BTC and ETH."
+  />
+  <meta
+    name="twitter:image"
+    content="https://defistate-public.s3.us-east-1.amazonaws.com/defistate-preview-002.png"
+  />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Celo Flow" />
+  <meta
+    property="og:description"
+    content="Move between dollars, BTC and ETH."
+  />
+  <meta property="og:url" content="https://celo-flow.defistate.io/" />
+  <meta
+    property="og:image"
+    content="https://defistate-public.s3.us-east-1.amazonaws.com/defistate-preview-002.png"
+  />
+
+  <title>Celo Flow</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap"
+    rel="stylesheet"
+  />
+
+  <link rel="icon" type="image/svg+xml" href="/public/defistate_hex_logo.svg" />
+
+  <style>
+    :root {
+      --bg: #f7f3ea;
+      --bg-2: #f2ede2;
+      --panel: rgba(255, 255, 255, 0.94);
+      --surface: #f6f3ec;
+      --surface-2: #f0ebdf;
+      --line: rgba(15, 23, 42, 0.07);
+      --text: #0f1720;
+      --muted: #687280;
+      --muted-2: #98a2b3;
+      --brand: #111827;
+      --brand-soft: #1f2937;
+      --accent: #22c55e;
+      --danger: #dc2626;
+      --warn: #d97706;
+      --shadow:
+        0 10px 30px rgba(15, 23, 42, 0.07),
+        0 30px 70px rgba(15, 23, 42, 0.08);
+      --radius-xl: 30px;
+      --radius-lg: 24px;
+      --radius-md: 18px;
+      --phone-width: 430px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      min-height: 100%;
+      background:
+        radial-gradient(circle at top left, rgba(255, 255, 255, 0.8), transparent 28%),
+        radial-gradient(circle at bottom right, rgba(255, 255, 255, 0.6), transparent 24%),
+        linear-gradient(180deg, var(--bg) 0%, var(--bg-2) 100%);
+      color: var(--text);
+      font-family: "Manrope", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    body {
+      display: flex;
+      justify-content: center;
+      overflow-x: hidden;
+    }
+
+    .app-shell {
+      width: 100%;
+      max-width: var(--phone-width);
+      min-height: 100dvh;
+      position: relative;
+    }
+
+    .phone-frame {
+      min-height: 100dvh;
+      padding:
+        max(18px, env(safe-area-inset-top))
+        16px
+        max(18px, env(safe-area-inset-bottom))
+        16px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 4px;
+
+    }
+
+    .brand-logo {
+      width: 32px;
+      height: 32px;
+      object-fit: contain;
+      display: block;
+      flex-shrink: 0;
+    }
+
+    .connect-button {
+      border: 0;
+      outline: none;
+      background: rgba(255, 255, 255, 0.92);
+      color: var(--text);
+      border: 1px solid rgba(15, 23, 42, 0.07);
+      border-radius: 999px;
+      height: 42px;
+      padding: 0 14px;
+      font-size: 0.86rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      cursor: pointer;
+      white-space: nowrap;
+      box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
+      transition: transform 160ms ease, background 160ms ease;
+      font-family: inherit;
+    }
+
+    .connect-button:hover {
+      transform: translateY(-1px);
+      background: #fff;
+    }
+
+    .hero-card {
+      position: relative;
+      height: 240px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.84) 0%, rgba(255,255,255,0.72) 100%);
+      border: 1px solid rgba(255,255,255,0.92);
+      box-shadow: var(--shadow);
+      border-radius: var(--radius-xl);
+      padding: 22px 18px 20px;
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      overflow: hidden;
+    }
+
+    .hero-view {
+      position: absolute;
+      inset: 22px 18px 20px 18px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      opacity: 0;
+      transform: translateY(8px);
+      pointer-events: none;
+      transition:
+        opacity 320ms ease,
+        transform 320ms ease;
+      overflow: hidden;
+    }
+
+    .hero-view-active {
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: auto;
+    }
+
+    .hero-title {
+      margin: 0;
+      font-size: clamp(2rem, 7vw, 2.7rem);
+      line-height: 0.96;
+      letter-spacing: -0.08em;
+      font-weight: 800;
+      max-width: 10ch;
+    }
+
+    .hero-balance-summary {
+      flex-shrink: 0;
+      margin-bottom: 10px;
+    }
+
+    .hero-balance-kicker {
+      margin: 0 0 6px;
+      font-size: 0.8rem;
+      line-height: 1;
+      color: var(--muted);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      text-transform: uppercase;
+    }
+
+    .hero-balance-total {
+      font-size: 2rem;
+      line-height: 0.95;
+      font-weight: 800;
+      letter-spacing: -0.07em;
+      color: var(--text);
+    }
+
+    .hero-balance-scroll {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+      padding-right: 2px;
+      mask-image: linear-gradient(to bottom, black 80%, transparent 100%);
+    }
+
+    .hero-balance-scroll::-webkit-scrollbar {
+      display: none;
+    }
+
+    .hero-balance-list-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+      flex-shrink: 0;
+    }
+
+    .hero-balance-list-item:last-child {
+      border-bottom: 0;
+    }
+
+    .hero-balance-list-left {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .hero-balance-list-icon {
+      width: 22px;
+      height: 22px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: #fff;
+      border: 1px solid rgba(15, 23, 42, 0.05);
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .hero-balance-list-icon img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .hero-balance-list-label {
+      font-size: 0.94rem;
+      line-height: 1.15;
+      color: var(--muted);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .hero-balance-list-value-group {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 6px;
+      min-width: 0;
+      justify-content: flex-end;
+    }
+
+    .hero-balance-list-value {
+      font-size: 0.98rem;
+      line-height: 1.1;
+      color: var(--text);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .hero-balance-list-subvalue {
+      font-size: 0.85rem;
+      line-height: 1.1;
+      color: var(--muted);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      white-space: nowrap;
+    }
+
+    .swap-card {
+      background: var(--panel);
+      border: 1px solid rgba(255,255,255,0.95);
+      box-shadow: var(--shadow);
+      border-radius: 32px;
+      padding: 14px;
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+    }
+
+    .swap-card-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 12px;
+      padding: 4px 4px 0;
+    }
+
+    .swap-title {
+      margin: 0;
+      font-size: 0.96rem;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+    }
+
+    .swap-pane-wrap {
+      position: relative;
+    }
+
+    .swap-pane {
+      background: #f3eee6;
+      border: 1px solid rgba(15, 23, 42, 0.05);
+      border-radius: 24px;
+      padding: 14px;
+    }
+
+    .pane-label-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .pane-label {
+      font-size: 0.84rem;
+      font-weight: 800;
+      color: var(--muted);
+      letter-spacing: -0.03em;
+    }
+
+    .pane-main {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .amount-wrap {
+      min-width: 0;
+      flex: 1 1 auto;
+    }
+
+    .amount-input {
+      width: 100%;
+      border: 0;
+      outline: none;
+      background: transparent;
+      padding: 0;
+      margin: 0;
+      color: var(--text);
+      font-size: clamp(2.2rem, 7vw, 3rem);
+      line-height: 1;
+      letter-spacing: -0.09em;
+      font-weight: 800;
+      box-shadow: none;
+      font-family: inherit;
+    }
+
+    .amount-input::placeholder {
+      color: #bcc3cc;
+    }
+
+    .amount-input[readonly] {
+      cursor: default;
+    }
+
+    .amount-fiat {
+      min-height: 1.2em;
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 0.82rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+
+    .price-impact {
+      min-height: 1px;
+      height: 0;
+      overflow: hidden;
+      margin: 0;
+      padding: 0;
+      font-size: 0;
+    }
+
+    .token-pill-wrap {
+      width: 144px;
+      flex: 0 0 auto;
+    }
+
+    .token-trigger {
+      width: 100%;
+      min-height: 52px;
+      border: 1px solid rgba(15, 23, 42, 0.07);
+      outline: none;
+      background: rgba(255,255,255,0.95);
+      border-radius: 999px;
+      padding: 10px 12px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      cursor: pointer;
+      transition: transform 160ms ease, background 160ms ease, border-color 160ms ease;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.75);
+      font-family: inherit;
+    }
+
+    .token-trigger:hover {
+      transform: translateY(-1px);
+      background: #fff;
+    }
+
+    .token-trigger[aria-expanded="true"] {
+      background: #fff;
+      border-color: rgba(15, 23, 42, 0.12);
+    }
+
+    .token-trigger-left {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      min-width: 0;
+      flex: 1;
+    }
+
+    .token-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      border: 1px solid rgba(15, 23, 42, 0.05);
+    }
+
+    .token-icon img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .token-symbol-text {
+      min-width: 0;
+      font-size: 0.95rem;
+      line-height: 1;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .token-chevron {
+      color: var(--muted-2);
+      font-size: 0.88rem;
+      flex-shrink: 0;
+    }
+
+    .hidden-native-select {
+      position: absolute !important;
+      opacity: 0 !important;
+      pointer-events: none !important;
+      width: 1px !important;
+      height: 1px !important;
+      overflow: hidden !important;
+    }
+
+    .inline-token-panel {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: calc(100% + 8px);
+      z-index: 30;
+      background: rgba(255,255,255,0.98);
+      border: 1px solid rgba(15, 23, 42, 0.06);
+      border-radius: 22px;
+      box-shadow:
+        0 12px 28px rgba(15, 23, 42, 0.08),
+        0 24px 60px rgba(15, 23, 42, 0.10);
+      padding: 10px;
+      display: none;
+      gap: 8px;
+      flex-direction: column;
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+    }
+
+    .inline-token-panel.open {
+      display: flex;
+    }
+
+    .inline-token-panel-title {
+      margin: 2px 4px 4px;
+      font-size: 0.78rem;
+      color: var(--muted);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      text-transform: uppercase;
+    }
+
+    .inline-token-option {
+      width: 100%;
+      border: 1px solid rgba(15, 23, 42, 0.05);
+      outline: none;
+      background: #fff;
+      border-radius: 18px;
+      padding: 11px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: transform 140ms ease, background 140ms ease, border-color 140ms ease;
+    }
+
+    .inline-token-option:hover {
+      transform: translateY(-1px);
+      background: #fbfbfb;
+      border-color: rgba(15, 23, 42, 0.09);
+    }
+
+    .inline-token-option.active {
+      background: #f8fafc;
+      border-color: rgba(15, 23, 42, 0.12);
+    }
+
+    .inline-token-option-left {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+      flex: 1;
+    }
+
+    .inline-token-option-icon {
+      width: 34px;
+      height: 34px;
+      border-radius: 999px;
+      overflow: hidden;
+      border: 1px solid rgba(15, 23, 42, 0.05);
+      background: #fff;
+      flex-shrink: 0;
+    }
+
+    .inline-token-option-icon img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .inline-token-option-meta {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .inline-token-option-symbol {
+      font-size: 0.94rem;
+      line-height: 1.1;
+      color: var(--text);
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      text-align: left;
+    }
+
+    .inline-token-option-caption {
+      font-size: 0.76rem;
+      line-height: 1.1;
+      color: var(--muted);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      text-align: left;
+    }
+
+    .inline-token-option-check {
+      font-size: 0.84rem;
+      line-height: 1;
+      color: var(--text);
+      font-weight: 900;
+      flex-shrink: 0;
+      visibility: hidden;
+    }
+
+    .inline-token-option.active .inline-token-option-check {
+      visibility: visible;
+    }
+
+    .swap-middle {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: -2px 0;
+      height: 22px;
+      position: relative;
+      z-index: 2;
+    }
+
+    .flow-divider {
+      width: 42px;
+      height: 42px;
+      border-radius: 16px;
+      border: 4px solid rgba(255,255,255,0.96);
+      background: #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--brand);
+      box-shadow:
+        0 10px 24px rgba(15, 23, 42, 0.08),
+        0 0 0 1px rgba(15, 23, 42, 0.04);
+      font-size: 0.94rem;
+      font-weight: 900;
+    }
+
+    .swap-footer {
+      margin-top: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .swap-button {
+      width: 100%;
+      height: 56px;
+      border: 0;
+      outline: none;
+      border-radius: 20px;
+      background: linear-gradient(180deg, var(--brand-soft) 0%, var(--brand) 100%);
+      color: white;
+      font-size: 1rem;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      cursor: pointer;
+      box-shadow:
+        0 14px 28px rgba(15, 23, 42, 0.18),
+        inset 0 1px 0 rgba(255,255,255,0.08);
+      transition: transform 160ms ease, box-shadow 160ms ease, opacity 160ms ease;
+      font-family: inherit;
+    }
+
+    .swap-button:hover:not(:disabled) {
+      transform: translateY(-1px);
+    }
+
+    .swap-button:disabled {
+      cursor: not-allowed;
+      background: linear-gradient(180deg, #e5e7eb 0%, #dbe1e7 100%);
+      color: #98a2b3;
+      box-shadow: none;
+    }
+
+    .swap-button-danger {
+      background: linear-gradient(180deg, #ef4444 0%, #dc2626 100%) !important;
+      color: #fff !important;
+    }
+
+    .bottom-copy {
+      margin-top: 2px;
+      padding: 0 4px;
+      color: var(--muted);
+      font-size: 0.84rem;
+      line-height: 1.45;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .bottom-copy strong {
+      color: var(--text);
+    }
+
+    @media (min-width: 768px) {
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        background:
+          linear-gradient(
+            90deg,
+            transparent calc(50% - 235px),
+            rgba(15, 23, 42, 0.02) calc(50% - 235px),
+            rgba(15, 23, 42, 0.02) calc(50% - 234px),
+            transparent calc(50% - 234px),
+            transparent calc(50% + 234px),
+            rgba(15, 23, 42, 0.02) calc(50% + 234px),
+            rgba(15, 23, 42, 0.02) calc(50% + 235px),
+            transparent calc(50% + 235px)
+          );
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <main class="phone-frame">
+      <header class="topbar">
+        <img
+          class="brand-logo"
+          src="/public/defistate_hex_logo.svg"
+          alt="Celo Flow"
+        />
+
+        <button id="connectWalletButton" type="button" class="connect-button">
+          Connect
+        </button>
+      </header>
+
+      <section class="hero-card">
+        <div id="heroTagView" class="hero-view hero-view-active">
+          <h1 class="hero-title">Move between dollars, BTC and ETH.</h1>
+        </div>
+
+        <div id="heroBalanceView" class="hero-view" aria-hidden="true">
+          <div class="hero-balance-summary">
+            <p class="hero-balance-kicker">Your balances</p>
+            <div id="heroBalanceTotal" class="hero-balance-total">$0.00</div>
+          </div>
+
+          <div class="hero-balance-scroll">
+            <div class="hero-balance-list-item">
+              <div class="hero-balance-list-left">
+                <span class="hero-balance-list-icon">
+                  <img src="/public/assets/USDM.png" alt="USDM" />
+                </span>
+                <span class="hero-balance-list-label">USDm</span>
+              </div>
+              <span class="hero-balance-list-value-group">
+                <span id="heroBalanceUSDMAmount" class="hero-balance-list-value">0</span>
+                <span id="heroBalanceUSDMUsd" class="hero-balance-list-subvalue">$0.00</span>
+              </span>
+            </div>
+
+            <div class="hero-balance-list-item">
+              <div class="hero-balance-list-left">
+                <span class="hero-balance-list-icon">
+                  <img src="/public/assets/USDC.png" alt="USDC" />
+                </span>
+                <span class="hero-balance-list-label">USDC</span>
+              </div>
+              <span class="hero-balance-list-value-group">
+                <span id="heroBalanceUSDCAmount" class="hero-balance-list-value">0</span>
+                <span id="heroBalanceUSDCUsd" class="hero-balance-list-subvalue">$0.00</span>
+              </span>
+            </div>
+
+            <div class="hero-balance-list-item">
+              <div class="hero-balance-list-left">
+                <span class="hero-balance-list-icon">
+                  <img src="/public/assets/USD₮.png" alt="USD₮" />
+                </span>
+                <span class="hero-balance-list-label">USD₮</span>
+              </div>
+              <span class="hero-balance-list-value-group">
+                <span id="heroBalanceUSDTAmount" class="hero-balance-list-value">0</span>
+                <span id="heroBalanceUSDTUsd" class="hero-balance-list-subvalue">$0.00</span>
+              </span>
+            </div>
+
+            <div class="hero-balance-list-item">
+              <div class="hero-balance-list-left">
+                <span class="hero-balance-list-icon">
+                  <img src="/public/assets/DAI.png" alt="DAI" />
+                </span>
+                <span class="hero-balance-list-label">DAI</span>
+              </div>
+              <span class="hero-balance-list-value-group">
+                <span id="heroBalanceDAIAmount" class="hero-balance-list-value">0</span>
+                <span id="heroBalanceDAIUsd" class="hero-balance-list-subvalue">$0.00</span>
+              </span>
+            </div>
+
+            <div class="hero-balance-list-item">
+              <div class="hero-balance-list-left">
+                <span class="hero-balance-list-icon">
+                  <img src="/public/assets/EURM.png" alt="EURM" />
+                </span>
+                <span class="hero-balance-list-label">EURm</span>
+              </div>
+              <span class="hero-balance-list-value-group">
+                <span id="heroBalanceEURMAmount" class="hero-balance-list-value">0</span>
+                <span id="heroBalanceEURMUsd" class="hero-balance-list-subvalue">$0.00</span>
+              </span>
+            </div>
+
+            <div class="hero-balance-list-item">
+              <div class="hero-balance-list-left">
+                <span class="hero-balance-list-icon">
+                  <img src="/public/assets/BTC.png" alt="BTC" />
+                </span>
+                <span class="hero-balance-list-label">BTC</span>
+              </div>
+              <span class="hero-balance-list-value-group">
+                <span id="heroBalanceBtc" class="hero-balance-list-value">0</span>
+                <span id="heroBalanceBtUSDM" class="hero-balance-list-subvalue">$0.00</span>
+              </span>
+            </div>
+
+            <div class="hero-balance-list-item">
+              <div class="hero-balance-list-left">
+                <span class="hero-balance-list-icon">
+                  <img src="/public/assets/ETH.png" alt="ETH" />
+                </span>
+                <span class="hero-balance-list-label">ETH</span>
+              </div>
+              <span class="hero-balance-list-value-group">
+                <span id="heroBalanceEth" class="hero-balance-list-value">0</span>
+                <span id="heroBalanceEthUsd" class="hero-balance-list-subvalue">$0.00</span>
+              </span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="swap-card">
+        <div class="swap-card-top">
+          <p class="swap-title">Convert with.</p>
+        </div>
+
+        <div class="swap-pane-wrap">
+          <div id="swapSellPane" class="swap-pane">
+            <div class="pane-label-row">
+              <label for="amountIn" class="pane-label">You pay</label>
+            </div>
+
+            <div class="pane-main">
+              <div class="amount-wrap">
+                <input
+                  id="amountIn"
+                  class="amount-input"
+                  type="text"
+                  inputmode="decimal"
+                  placeholder="0"
+                  autocomplete="off"
+                />
+                <div id="amountInValue" class="amount-fiat"></div>
+              </div>
+
+              <div class="token-pill-wrap">
+                <button
+                  id="tokenInTrigger"
+                  type="button"
+                  class="token-trigger"
+                  data-token-target="in"
+                  aria-label="Select input token"
+                  aria-expanded="false"
+                >
+                  <span class="token-trigger-left">
+                    <span class="token-icon" id="tokenInIcon">
+                      <img src="/public/token-default.svg" alt="" />
+                    </span>
+                    <span class="token-symbol-text" id="tokenInLabel">Select</span>
+                  </span>
+                  <span class="token-chevron">▾</span>
+                </button>
+
+                <select id="tokenIn" class="hidden-native-select"></select>
+              </div>
+            </div>
+          </div>
+
+          <div id="inlineTokenPanelIn" class="inline-token-panel" aria-hidden="true">
+            <div class="inline-token-panel-title">Choose asset</div>
+            <div id="inlineTokenPanelInOptions"></div>
+          </div>
+        </div>
+
+        <div class="swap-middle" aria-hidden="true">
+          <div class="flow-divider">↓</div>
+        </div>
+
+        <div class="swap-pane-wrap">
+          <div id="swapBuyPane" class="swap-pane">
+            <div class="pane-label-row">
+              <label for="amountOut" class="pane-label">You receive</label>
+            </div>
+
+            <div class="pane-main">
+              <div class="amount-wrap">
+                <input
+                  id="amountOut"
+                  class="amount-input"
+                  type="text"
+                  placeholder="0"
+                  readonly
+                />
+                <div id="amountOutValue" class="amount-fiat"></div>
+                <div id="priceImpactRow" class="price-impact"></div>
+              </div>
+
+              <div class="token-pill-wrap">
+                <button
+                  id="tokenOutTrigger"
+                  type="button"
+                  class="token-trigger"
+                  data-token-target="out"
+                  aria-label="Select output token"
+                  aria-expanded="false"
+                >
+                  <span class="token-trigger-left">
+                    <span class="token-icon" id="tokenOutIcon">
+                      <img src="/public/token-default.svg" alt="" />
+                    </span>
+                    <span class="token-symbol-text" id="tokenOutLabel">Select</span>
+                  </span>
+                  <span class="token-chevron">▾</span>
+                </button>
+
+                <select id="tokenOut" class="hidden-native-select"></select>
+              </div>
+            </div>
+          </div>
+
+          <div id="inlineTokenPanelOut" class="inline-token-panel" aria-hidden="true">
+            <div class="inline-token-panel-title">Choose asset</div>
+            <div id="inlineTokenPanelOutOptions"></div>
+          </div>
+        </div>
+
+        <div class="swap-footer">
+          <button id="swapButton" type="button" class="swap-button" disabled>
+            Convert
+          </button>
+        </div>
+      </section>
+
+      <section class="bottom-copy">
+        Powered by <strong>DeFiState</strong> on <strong>Celo</strong>
+      </section>
+    </main>
+  </div>
+
+  <script src="graph.js?v=2"></script>
+  <script src="app.js?v=1"></script>
+</body>
+</html>
