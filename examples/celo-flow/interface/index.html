@@ -118,6 +118,55 @@
       padding-top: 2px;
     }
 
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .brand-text {
+      position: relative;
+      display: inline-block;
+      font-family: 'Outfit', sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: #111827;
+      overflow: hidden;
+    }
+
+    /* moving light sweep */
+    .brand-text::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: -140%;
+      width: 80%;
+      height: 100%;
+      background: linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(255,255,255,0.0) 20%,
+        rgba(255,255,255,0.75) 50%,
+        rgba(255,255,255,0.0) 80%,
+        transparent 100%
+      );
+      transform: skewX(-20deg);
+      animation: flowSweep 3.2s ease-in-out infinite;
+      pointer-events: none;
+    }
+
+    @keyframes flowSweep {
+      0% {
+        left: -140%;
+      }
+      55% {
+        left: 140%;
+      }
+      100% {
+        left: 140%;
+      }
+    }
+
     .brand-logo {
       width: 32px;
       height: 32px;
@@ -779,11 +828,14 @@
   <div class="app-shell">
     <main class="phone-frame">
       <header class="topbar">
-        <img
-          class="brand-logo"
-          src="/public/defistate_hex_logo.png"
-          alt="Celo Flow"
-        />
+        <div class="brand">
+          <img
+            class="brand-logo"
+            src="/public/defistate_hex_logo.png"
+            alt="Celo Flow"
+          />
+          <span class="brand-text">Flow</span>
+        </div>
 
         <button id="connectWalletButton" type="button" class="connect-button">
           Connect
