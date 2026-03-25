@@ -61,11 +61,6 @@ const elements = {
   tokenInLabel: document.getElementById("tokenInLabel"),
   tokenOutLabel: document.getElementById("tokenOutLabel"),
 
-  inlineTokenPanelIn: document.getElementById("inlineTokenPanelIn"),
-  inlineTokenPanelOut: document.getElementById("inlineTokenPanelOut"),
-  inlineTokenPanelInOptions: document.getElementById("inlineTokenPanelInOptions"),
-  inlineTokenPanelOutOptions: document.getElementById("inlineTokenPanelOutOptions"),
-
   amountIn: document.getElementById("amountIn"),
   amountOut: document.getElementById("amountOut"),
   amountInValue: document.getElementById("amountInValue"),
@@ -92,6 +87,14 @@ const elements = {
   heroBalanceBtcUsd: document.getElementById("heroBalanceBtcUsd"),
   heroBalanceEth: document.getElementById("heroBalanceEth"),
   heroBalanceEthUsd: document.getElementById("heroBalanceEthUsd"),
+};
+
+const modalElements = {
+  modal: document.getElementById("tokenModal"),
+  list: document.getElementById("tokenModalList"),
+  close: document.getElementById("tokenModalClose"),
+  title: document.getElementById("tokenModalTitle"),
+  backdrop: document.querySelector(".token-modal-backdrop"),
 };
 
 let tokensState = [];
@@ -132,7 +135,7 @@ let currentQuoteHealth = "unknown";
 let isSwapExecuting = false;
 let buttonMessageOverride = "";
 
-let openInlinePanelTarget = "";
+let activeTokenSelectTarget = null;
 
 function normalizeTokenKey(value) {
   return typeof value === "string" ? value.toLowerCase() : "";
@@ -1247,6 +1250,106 @@ function filterOutputTokens(tokens) {
   return tokens.filter(isAllowedToken);
 }
 
+function loadTokenModalTitle(target) {
+  if (!modalElements.title) return;
+  modalElements.title.textContent =
+    target === "in" ? "Select asset to pay" : "Select asset to receive";
+}
+
+function openTokenModal(target) {
+  activeTokenSelectTarget = target;
+  loadTokenModalTitle(target);
+  renderTokenModalList(target);
+
+  modalElements.modal.classList.remove("hidden");
+  modalElements.modal.setAttribute("aria-hidden", "false");
+
+  const trigger = target === "in" ? elements.tokenInTrigger : elements.tokenOutTrigger;
+  trigger.setAttribute("aria-expanded", "true");
+
+  document.body.style.overflow = "hidden";
+}
+
+function closeTokenModal() {
+  modalElements.modal.classList.add("hidden");
+  modalElements.modal.setAttribute("aria-hidden", "true");
+
+  elements.tokenInTrigger.setAttribute("aria-expanded", "false");
+  elements.tokenOutTrigger.setAttribute("aria-expanded", "false");
+
+  activeTokenSelectTarget = null;
+  document.body.style.overflow = "";
+}
+
+function getTokenPickerCaption(token) {
+  const address = normalizeTokenKey(getTokenAddress(token));
+
+  if (STABLE_TOKEN_ADDRESSES.has(address)) {
+    return "Supported stable";
+  }
+
+  if (
+    address === HERO_TOKEN_ADDRESSES.btc ||
+    address === HERO_TOKEN_ADDRESSES.eth
+  ) {
+    return "Supported asset";
+  }
+
+  return "Supported token";
+}
+
+function renderTokenModalList(target) {
+  const tokens = target === "in" ? inputTokensState : outputTokensState;
+  const selectEl = target === "in" ? elements.tokenIn : elements.tokenOut;
+
+  modalElements.list.innerHTML = "";
+
+  for (const token of tokens) {
+    if (!isAllowedToken(token)) continue;
+
+    const isActive = selectEl.value === getTokenValue(token);
+
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "token-modal-item";
+
+    if (isActive) {
+      item.classList.add("active");
+    }
+
+    item.innerHTML = `
+      <span class="token-modal-item-left">
+        <span class="token-modal-item-icon">
+          <img src="${getTokenLogoUrl(token)}" alt="" />
+        </span>
+        <span class="token-modal-item-meta">
+          <span class="token-modal-item-symbol">${getTokenLabel(token)}</span>
+          <span class="token-modal-item-caption">${getTokenPickerCaption(token)}</span>
+        </span>
+      </span>
+      <span class="token-modal-item-check">✓</span>
+    `;
+
+    item.addEventListener("click", async () => {
+      selectEl.value = getTokenValue(token);
+      syncTriggerWithSelection(target);
+      closeTokenModal();
+
+      resetQuoteDisplay();
+
+      if (walletState.connected) {
+        await refreshDisplayedBalances();
+      }
+
+      updateDisplayedTokenValues();
+      updateSwapButtonStateWithBalanceCheck();
+      await fetchQuote();
+    });
+
+    modalElements.list.appendChild(item);
+  }
+}
+
 async function loadTokens() {
   setButtonOverride("Loading tokens...");
 
@@ -1279,8 +1382,6 @@ async function loadTokens() {
 
     rebuildTokenMap(tokensState);
     loadTokenSelectors();
-    renderInlineTokenPanel("in");
-    renderInlineTokenPanel("out");
 
     elements.amountIn.value = DEFAULT_AMOUNT_IN;
 
@@ -1593,126 +1694,6 @@ function syncTriggerWithSelection(target) {
   iconEl.innerHTML = `<img src="${getTokenLogoUrl(token)}" alt="" />`;
 }
 
-function getInlinePanelElements(target) {
-  return target === "in"
-    ? {
-        panel: elements.inlineTokenPanelIn,
-        optionsContainer: elements.inlineTokenPanelInOptions,
-        trigger: elements.tokenInTrigger,
-        selectEl: elements.tokenIn,
-        tokens: inputTokensState,
-      }
-    : {
-        panel: elements.inlineTokenPanelOut,
-        optionsContainer: elements.inlineTokenPanelOutOptions,
-        trigger: elements.tokenOutTrigger,
-        selectEl: elements.tokenOut,
-        tokens: outputTokensState,
-      };
-}
-
-function getTokenPickerCaption(token) {
-  const address = normalizeTokenKey(getTokenAddress(token));
-
-  if (STABLE_TOKEN_ADDRESSES.has(address)) {
-    return "Supported stable";
-  }
-
-  if (
-    address === HERO_TOKEN_ADDRESSES.btc ||
-    address === HERO_TOKEN_ADDRESSES.eth
-  ) {
-    return "Supported asset";
-  }
-
-  return "Supported token";
-}
-
-function closeInlineTokenPanels() {
-  openInlinePanelTarget = "";
-
-  [elements.inlineTokenPanelIn, elements.inlineTokenPanelOut].forEach((panel) => {
-    if (!panel) return;
-    panel.classList.remove("open");
-    panel.setAttribute("aria-hidden", "true");
-  });
-
-  [elements.tokenInTrigger, elements.tokenOutTrigger].forEach((trigger) => {
-    if (!trigger) return;
-    trigger.setAttribute("aria-expanded", "false");
-  });
-}
-
-function openInlineTokenPanel(target) {
-  const config = getInlinePanelElements(target);
-  closeInlineTokenPanels();
-
-  config.panel.classList.add("open");
-  config.panel.setAttribute("aria-hidden", "false");
-  config.trigger.setAttribute("aria-expanded", "true");
-  openInlinePanelTarget = target;
-}
-
-function toggleInlineTokenPanel(target) {
-  if (openInlinePanelTarget === target) {
-    closeInlineTokenPanels();
-    return;
-  }
-
-  renderInlineTokenPanel(target);
-  openInlineTokenPanel(target);
-}
-
-function renderInlineTokenPanel(target) {
-  const config = getInlinePanelElements(target);
-  config.optionsContainer.innerHTML = "";
-
-  for (const token of config.tokens) {
-    if (!isAllowedToken(token)) continue;
-
-    const option = document.createElement("button");
-    option.type = "button";
-    option.className = "inline-token-option";
-
-    const isActive = config.selectEl.value === getTokenValue(token);
-    if (isActive) {
-      option.classList.add("active");
-    }
-
-    option.innerHTML = `
-      <span class="inline-token-option-left">
-        <span class="inline-token-option-icon">
-          <img src="${getTokenLogoUrl(token)}" alt="" />
-        </span>
-        <span class="inline-token-option-meta">
-          <span class="inline-token-option-symbol">${getTokenLabel(token)}</span>
-          <span class="inline-token-option-caption">${getTokenPickerCaption(token)}</span>
-        </span>
-      </span>
-      <span class="inline-token-option-check">✓</span>
-    `;
-
-    option.addEventListener("click", async () => {
-      config.selectEl.value = getTokenValue(token);
-      syncTriggerWithSelection(target);
-      renderInlineTokenPanel(target);
-      closeInlineTokenPanels();
-
-      resetQuoteDisplay();
-
-      if (walletState.connected) {
-        await refreshDisplayedBalances();
-      }
-
-      updateDisplayedTokenValues();
-      updateSwapButtonStateWithBalanceCheck();
-      await fetchQuote();
-    });
-
-    config.optionsContainer.appendChild(option);
-  }
-}
-
 function showHeroView(view) {
   const showTag = view === "tag";
 
@@ -1753,17 +1734,16 @@ function bindEvents() {
 
   elements.tokenInTrigger.addEventListener("click", (event) => {
     event.stopPropagation();
-    toggleInlineTokenPanel("in");
+    openTokenModal("in");
   });
 
   elements.tokenOutTrigger.addEventListener("click", (event) => {
     event.stopPropagation();
-    toggleInlineTokenPanel("out");
+    openTokenModal("out");
   });
 
   elements.tokenIn.addEventListener("change", async () => {
     syncTriggerWithSelection("in");
-    renderInlineTokenPanel("in");
     resetQuoteDisplay();
 
     if (walletState.connected) {
@@ -1777,7 +1757,6 @@ function bindEvents() {
 
   elements.tokenOut.addEventListener("change", async () => {
     syncTriggerWithSelection("out");
-    renderInlineTokenPanel("out");
     resetQuoteDisplay();
 
     if (walletState.connected) {
@@ -1813,23 +1792,12 @@ function bindEvents() {
     await executeSwapPlan();
   });
 
-  document.addEventListener("click", (event) => {
-    const clickedInsideIn =
-      elements.tokenInTrigger.contains(event.target) ||
-      elements.inlineTokenPanelIn.contains(event.target);
-
-    const clickedInsideOut =
-      elements.tokenOutTrigger.contains(event.target) ||
-      elements.inlineTokenPanelOut.contains(event.target);
-
-    if (!clickedInsideIn && !clickedInsideOut) {
-      closeInlineTokenPanels();
-    }
-  });
+  modalElements.close.addEventListener("click", closeTokenModal);
+  modalElements.backdrop.addEventListener("click", closeTokenModal);
 
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
-      closeInlineTokenPanels();
+      closeTokenModal();
     }
   });
 }
