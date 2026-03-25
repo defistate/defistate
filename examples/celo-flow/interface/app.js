@@ -734,9 +734,7 @@ function updateDisplayedTokenValues() {
     !!lastQuoteSignature &&
     lastQuoteSignature === currentSignature &&
     latestAppliedQuoteRequestId > 0 &&
-    String(elements.amountOut.value || "").trim() !== "" &&
-    String(elements.amountOut.value || "").trim() !== "Loading...";
-
+    String(elements.amountOut.value || "").trim() !== "" 
   if (!hasValidSettledQuote) {
     clearPriceImpactDisplay();
     return;
@@ -1085,7 +1083,7 @@ async function fetchQuote() {
     const url = `/quote?${params.toString()}`;
 
     if (!lastSettledQuote) {
-      elements.amountOut.value = "Loading...";
+      elements.amountOut.value = "";
       updateDisplayedTokenValues();
       updateSwapButtonStateWithBalanceCheck();
     }
