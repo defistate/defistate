@@ -45,6 +45,35 @@ type pendingInit struct {
 	spacing uint64
 }
 
+// TickIndexer maintains an indexed, incrementally-updated view of initialized ticks
+// for a set of tracked pools. It processes block-by-block updates using a combination
+// of event-driven updates (logs) and proactive freshness-window refreshes.
+//
+// For each block, TickIndexer guarantees that the view it provides is:
+//
+//  1. Log-accurate:
+//     All ticks modified in that block (as emitted via logs) are fetched and applied.
+//
+//  2. Fresh within an active price window:
+//     For each pool, all initialized ticks within ±TickFreshnessGuaranteePercent of
+//     the current tick are refreshed every block, ensuring correctness in the region
+//     most relevant for pricing and routing.
+//
+//  3. Eventually consistent globally:
+//     Outside the freshness window, ticks are reconciled through periodic resyncs,
+//     ensuring full correctness over time.
+//
+// The combination of these guarantees ensures that, for each block, the indexer
+// provides a deterministic and up-to-date view of ticks where it matters most
+// (near the active price), while maintaining overall correctness across the full
+// state via resynchronization.
+//
+// Tick data is maintained in sorted order per pool, and updates are applied
+// incrementally using binary search for efficient insert/update/remove operations.
+//
+// This component is designed for high-throughput, low-latency environments where
+// correctness near the active trading range is critical, and full-state accuracy
+// is maintained asynchronously.
 type TickIndexer struct {
 	id          []uint64
 	address     []common.Address
@@ -59,9 +88,13 @@ type TickIndexer struct {
 	getInitializedTicks func(ctx context.Context, pools []common.Address, bitmaps []Bitmap, spacing []uint64, blockNumber *big.Int) (infos [][]TickInfo, errs []error)
 	getTicks            func(ctx context.Context, pools []common.Address, ticks [][]int64, blockNumber *big.Int) ([][]TickInfo, []error)
 	updatedInBlock      func(logs []types.Log) (pools []common.Address, updatedTicks [][]int64, err error)
-	errorHandler        func(error)
-	testBloomFunc       func(types.Bloom) bool
-	filterTopics        [][]common.Hash
+
+	// fetch pool.Tick for each pool
+	getCurrentTick func(ctx context.Context, pools []common.Address) (currentTickEachPool []int64, errs []error)
+
+	errorHandler  func(error)
+	testBloomFunc func(types.Bloom) bool
+	filterTopics  [][]common.Hash
 
 	// Mappings for efficient lookups
 	idToIndex      map[uint64]int
@@ -77,6 +110,9 @@ type TickIndexer struct {
 
 	logMaxRetries int
 	logRetryDelay time.Duration
+
+	// this allows us create a window of ticks to fetch on every block irrespective of logs
+	tickFreshnessGuaranteePercent uint64
 
 	mu sync.RWMutex
 	// Observability
@@ -95,23 +131,25 @@ type TickView struct {
 
 // Config holds all the dependencies and settings for creating a new TickIndexer.
 type Config struct {
-	SystemName          string
-	Registry            prometheus.Registerer
-	NewBlockEventer     chan *types.Block
-	GetClient           func() (ethclients.ETHClient, error)
-	GetTickBitmap       func(ctx context.Context, pools []common.Address, spacing []uint64, blockNumber *big.Int) ([]Bitmap, []error)
-	GetInitializedTicks func(ctx context.Context, pools []common.Address, bitmaps []Bitmap, spacing []uint64, blockNumber *big.Int) (infos [][]TickInfo, errs []error)
-	GetTicks            func(ctx context.Context, pools []common.Address, ticks [][]int64, blockNumber *big.Int) ([][]TickInfo, []error)
-	UpdatedInBlock      func(logs []types.Log) (pools []common.Address, updatedTicks [][]int64, err error)
-	ErrorHandler        func(error)
-	TestBloomFunc       func(types.Bloom) bool
-	FilterTopics        [][]common.Hash
-	InitFrequency       time.Duration
-	ResyncFrequency     time.Duration
-	UpdateFrequency     time.Duration
-	LogMaxRetries       int
-	LogRetryDelay       time.Duration
-	Logger              Logger
+	SystemName                    string
+	Registry                      prometheus.Registerer
+	NewBlockEventer               chan *types.Block
+	GetClient                     func() (ethclients.ETHClient, error)
+	GetTickBitmap                 func(ctx context.Context, pools []common.Address, spacing []uint64, blockNumber *big.Int) ([]Bitmap, []error)
+	GetInitializedTicks           func(ctx context.Context, pools []common.Address, bitmaps []Bitmap, spacing []uint64, blockNumber *big.Int) (infos [][]TickInfo, errs []error)
+	GetTicks                      func(ctx context.Context, pools []common.Address, ticks [][]int64, blockNumber *big.Int) ([][]TickInfo, []error)
+	UpdatedInBlock                func(logs []types.Log) (pools []common.Address, updatedTicks [][]int64, err error)
+	GetCurrentTick                func(ctx context.Context, pools []common.Address) (currentTickEachPool []int64, errs []error)
+	ErrorHandler                  func(error)
+	TestBloomFunc                 func(types.Bloom) bool
+	FilterTopics                  [][]common.Hash
+	InitFrequency                 time.Duration
+	ResyncFrequency               time.Duration
+	UpdateFrequency               time.Duration
+	LogMaxRetries                 int
+	LogRetryDelay                 time.Duration
+	TickFreshnessGuaranteePercent uint64
+	Logger                        Logger
 }
 
 func (cfg *Config) validate() error {
@@ -131,8 +169,14 @@ func (cfg *Config) validate() error {
 	if cfg.GetTicks == nil {
 		return fmt.Errorf("GetTicks dependency: %w", ErrNilDependency)
 	}
+	if cfg.GetCurrentTick == nil {
+		return fmt.Errorf("GetCurrentTick dependency: %w", ErrNilDependency)
+	}
 	if cfg.UpdatedInBlock == nil {
 		return fmt.Errorf("UpdatedInBlock dependency: %w", ErrNilDependency)
+	}
+	if cfg.TickFreshnessGuaranteePercent == 0 {
+		return fmt.Errorf("TickFreshnessGuaranteePercent cannot be 0")
 	}
 	if cfg.ErrorHandler == nil {
 		return fmt.Errorf("ErrorHandler dependency: %w", ErrNilDependency)
@@ -196,21 +240,22 @@ func NewTickIndexer(
 			cfg.ErrorHandler(err) // Call the original handler
 		},
 
-		testBloomFunc:   cfg.TestBloomFunc,
-		filterTopics:    cfg.FilterTopics,
-		initFrequency:   cfg.InitFrequency,
-		resyncFrequency: cfg.ResyncFrequency,
-		updateFrequency: cfg.UpdateFrequency,
-		metrics:         metrics,
-		logMaxRetries:   cfg.LogMaxRetries,
-		logRetryDelay:   cfg.LogRetryDelay,
-		logger:          cfg.Logger,
+		testBloomFunc:                 cfg.TestBloomFunc,
+		filterTopics:                  cfg.FilterTopics,
+		initFrequency:                 cfg.InitFrequency,
+		resyncFrequency:               cfg.ResyncFrequency,
+		updateFrequency:               cfg.UpdateFrequency,
+		metrics:                       metrics,
+		logMaxRetries:                 cfg.LogMaxRetries,
+		logRetryDelay:                 cfg.LogRetryDelay,
+		getCurrentTick:                cfg.GetCurrentTick,
+		tickFreshnessGuaranteePercent: cfg.TickFreshnessGuaranteePercent,
+		logger:                        cfg.Logger,
 	}
 
 	// Launch the background goroutines.
 	go tickIndexer.listenBlockEventer(ctx, cfg.NewBlockEventer)
 	go tickIndexer.startInitializer(ctx)
-	go tickIndexer.startUpdater(ctx)
 	go tickIndexer.startResyncer(ctx)
 
 	// In NewTickIndexer, after starting goroutines...
@@ -309,28 +354,6 @@ func (ti *TickIndexer) startInitializer(ctx context.Context) {
 	}
 }
 
-// startUpdater periodically drains the pendingUpdates channel and applies them to the state.
-func (ti *TickIndexer) startUpdater(ctx context.Context) {
-	ticker := time.NewTicker(ti.updateFrequency)
-	defer ticker.Stop()
-	for {
-		select {
-		case update := <-ti.pendingUpdates:
-			// METRIC: On successful receive, decrement the queue depth gauge.
-			ti.logger.Debug(
-				"applying tick updates",
-				"pool_count", len(update.pools),
-			)
-			ti.metrics.pendingUpdatesQueue.Dec()
-			ti.mu.Lock()
-			ti.applyTickUpdates(update.pools, update.newDatas, update.blockNumber)
-			ti.mu.Unlock()
-		case <-ctx.Done():
-			return
-		}
-	}
-}
-
 // startResyncer periodically re-fetches the state of tracked pools to correct
 // any state drift that may have occurred from missed events.
 func (ti *TickIndexer) startResyncer(ctx context.Context) {
@@ -413,73 +436,135 @@ func (ti *TickIndexer) handleNewBlock(ctx context.Context, b *types.Block) error
 		return &BlockProcessingError{BlockNumber: blockNum, BaseError: BaseError{Err: fmt.Errorf("failed to filter logs with retry: %w", err)}}
 	}
 
-	// Create a snapshot of currently tracked pools to avoid repeated locking.
+	ticksToFetchByPool := make(map[common.Address]map[int64]struct{})
+
 	ti.mu.RLock()
-	trackedPools := make(map[common.Address]struct{}, len(ti.addressToIndex))
-	for addr := range ti.addressToIndex {
-		trackedPools[addr] = struct{}{}
+
+	// hold lock and copy vars
+	numItems := len(ti.address)
+
+	pools := make([]common.Address, numItems)
+	spacing := make([]uint64, numItems)
+	ticks := make([][]TickInfo, numItems)
+
+	// copy
+	copy(pools, ti.address)
+	copy(spacing, ti.spacing)
+	for i := range ti.ticks {
+		tcopy := make([]TickInfo, len(ti.ticks[i]))
+		copy(tcopy, ti.ticks[i])
+		ticks[i] = tcopy
 	}
+	// set map
+	for addr := range ti.addressToIndex {
+		ticksToFetchByPool[addr] = make(map[int64]struct{})
+	}
+
 	ti.mu.RUnlock()
-	poolsToFetch := make(map[common.Address]struct{})
-	ticksToFetchByPool := make(map[common.Address][]int64)
+
+	var allErrs []error
+
+	defer func() {
+		for _, err := range allErrs {
+			ti.errorHandler(err)
+		}
+	}()
+
+	currentTicks, errs := ti.getCurrentTick(ctx, pools)
+	if len(currentTicks) != len(pools) {
+		return &BlockProcessingError{
+			BlockNumber: blockNum,
+			BaseError:   BaseError{Err: fmt.Errorf("getCurrentTick returned %d ticks for %d pools", len(currentTicks), len(pools))},
+		}
+	}
+
+	if len(errs) != len(pools) {
+		return &BlockProcessingError{
+			BlockNumber: blockNum,
+			BaseError:   BaseError{Err: fmt.Errorf("getCurrentTick returned %d errors for %d pools", len(errs), len(pools))},
+		}
+	}
+
+	for i := range currentTicks {
+		if errs[i] != nil {
+			// collect errs
+			allErrs = append(allErrs, errs[i])
+			continue
+		}
+
+		// we select a window of ticks to refresh from ticks set on every block
+		// using tickFreshnessGuaranteePercent
+		ticksForFreshnessWindow := SelectTicksForFreshnessWindow(
+			currentTicks[i],
+			spacing[i],
+			ticks[i],
+			ti.tickFreshnessGuaranteePercent,
+		)
+
+		for _, tick := range ticksForFreshnessWindow {
+			ticksToFetchByPool[pools[i]][tick] = struct{}{}
+		}
+	}
 
 	updatedPoolAddrs, updatedTickIndexes, err := ti.updatedInBlock(logs)
 	if err != nil {
-		ti.errorHandler(fmt.Errorf("block %d: error parsing updated pools from logs: %w", blockNum, err))
+		allErrs = append(allErrs, fmt.Errorf("block %d: error parsing updated pools from logs: %w", blockNum, err))
 	} else {
 		for i, updatedPoolAddr := range updatedPoolAddrs {
-			// Check if the pool is tracked by this indexer instance before fetching (lock-free).
-			if _, isTracked := trackedPools[updatedPoolAddr]; isTracked {
-				poolsToFetch[updatedPoolAddr] = struct{}{}
-				ticksToFetchByPool[updatedPoolAddr] = append(ticksToFetchByPool[updatedPoolAddr], updatedTickIndexes[i]...)
+			// update ticks to fetch for each known pool
+			if ttf, isTracked := ticksToFetchByPool[updatedPoolAddr]; isTracked {
+				for _, tick := range updatedTickIndexes[i] {
+					ttf[tick] = struct{}{}
+				}
 			}
 		}
 	}
 
-	if len(poolsToFetch) == 0 {
-		return nil
+	ticksToFetchArr := make([][]int64, len(pools))
+	for i, pool := range pools {
+		ticks := []int64{}
+		ttf := ticksToFetchByPool[pool]
+		for tick := range ttf {
+			ticks = append(ticks, tick)
+		}
+		ticksToFetchArr[i] = ticks
 	}
 
-	// Convert maps to slices for the batch RPC call.
-	finalPoolsToFetch := make([]common.Address, 0, len(poolsToFetch))
-	finalTicksToFetch := make([][]int64, 0, len(poolsToFetch))
-	for addr := range poolsToFetch {
-		finalPoolsToFetch = append(finalPoolsToFetch, addr)
-		finalTicksToFetch = append(finalTicksToFetch, ticksToFetchByPool[addr])
-	}
-
-	newTickData, errs := ti.getTicks(ctx, finalPoolsToFetch, finalTicksToFetch, b.Number())
+	// @todo
+	// what should happen when we get error for getTicks request for a pool?
+	// for now, we just handle error
+	newTickData, errs := ti.getTicks(ctx, pools, ticksToFetchArr, b.Number())
 	for _, e := range errs {
 		if e != nil {
-			ti.errorHandler(fmt.Errorf("block %d: error getting updated tick data: %w", blockNum, e))
+			allErrs = append(allErrs, fmt.Errorf("block %d: error getting updated tick data: %w", blockNum, e))
 		}
 	}
-	select {
-	case ti.pendingUpdates <- updateRequest{
-		pools:       finalPoolsToFetch,
-		newDatas:    newTickData,
-		blockNumber: blockNum,
-	}:
-		// METRIC: On successful send, increment the queue depth gauge.
-		ti.metrics.pendingUpdatesQueue.Inc()
-	default:
-		// Use the new custom error type here
-		err := &UpdateDroppedError{
-			BlockProcessingError: BlockProcessingError{
-				BlockNumber: blockNum,
-				BaseError: BaseError{
-					Err: fmt.Errorf("tick update channel is full, dropping update"),
-				},
+	if len(newTickData) != len(pools) {
+		return &BlockProcessingError{
+			BlockNumber: blockNum,
+			BaseError: BaseError{
+				Err: fmt.Errorf("getTicks returned %d results for %d pools", len(newTickData), len(pools)),
 			},
 		}
-		ti.errorHandler(err)
-		ti.metrics.updatesDroppedTotal.Inc()
 	}
+	if len(errs) != len(pools) {
+		return &BlockProcessingError{
+			BlockNumber: blockNum,
+			BaseError: BaseError{
+				Err: fmt.Errorf("getTicks returned %d errors for %d pools", len(errs), len(pools)),
+			},
+		}
+	}
+
+	// lock indexer and apply updates
+	ti.mu.Lock()
+	ti.applyTickUpdates(pools, newTickData, b.NumberU64())
+	ti.mu.Unlock()
 
 	ti.logger.Info(
 		"found tick updates in block",
 		"block", blockNum,
-		"pools_with_updates", len(finalPoolsToFetch),
+		"pools_with_updates", len(updatedPoolAddrs),
 	)
 	return nil
 }
@@ -505,7 +590,7 @@ func (ti *TickIndexer) applyTickUpdates(pools []common.Address, newDatasByPool [
 			// Case 1: The tick exists at the found index.
 			if foundIndex < len(poolTicks) && poolTicks[foundIndex].Index == updatedTick.Index {
 				// Check if the tick has become uninitialized.
-				if updatedTick.LiquidityGross.Cmp(big.NewInt(0)) == 0 {
+				if updatedTick.LiquidityGross.Sign() == 0 {
 					// REMOVE the tick from the slice.
 					ti.logger.Debug("removing zero-liquidity tick", "pool", poolAddr.Hex(), "tick_index", updatedTick.Index)
 					ti.ticks[poolIndex] = append(ti.ticks[poolIndex][:foundIndex], ti.ticks[poolIndex][foundIndex+1:]...)
@@ -516,7 +601,7 @@ func (ti *TickIndexer) applyTickUpdates(pools []common.Address, newDatasByPool [
 				}
 			} else { // Case 2: The tick does not exist.
 				// If the tick has liquidity, it's a new tick that needs to be inserted.
-				if updatedTick.LiquidityGross.Cmp(big.NewInt(0)) > 0 {
+				if updatedTick.LiquidityGross.Sign() > 0 {
 					// INSERT the new tick at the correct sorted position.
 					ti.logger.Debug("inserting new tick", "pool", poolAddr.Hex(), "tick_index", updatedTick.Index)
 					ti.ticks[poolIndex] = append(ti.ticks[poolIndex], TickInfo{})

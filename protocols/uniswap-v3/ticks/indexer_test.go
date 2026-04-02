@@ -22,16 +22,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// mockProvider and its methods...
 type mockProvider struct {
 	t                       *testing.T
 	getTickBitmapFunc       func(context.Context, []common.Address, []uint64) ([]Bitmap, []error)
 	getInitializedTicksFunc func(context.Context, []common.Address, []Bitmap, []uint64) ([][]TickInfo, []error)
 	getTicksFunc            func(context.Context, []common.Address, [][]int64) ([][]TickInfo, []error)
 	updatedInBlockFunc      func([]types.Log) ([]common.Address, [][]int64, error)
+	getCurrentTickFunc      func(context.Context, []common.Address) ([]int64, []error)
 	getClientFunc           func() (ethclients.ETHClient, error)
 	testBloomFunc           func(types.Bloom) bool
-	mu                      sync.RWMutex // Mutex to protect concurrent access to the function pointers
+
+	tickFreshnessGuaranteePercent uint64
+
+	mu sync.RWMutex
 }
 
 func newMockProvider(t *testing.T) *mockProvider {
@@ -62,6 +65,12 @@ func (p *mockProvider) OnUpdatedInBlock(f func([]types.Log) ([]common.Address, [
 	p.updatedInBlockFunc = f
 }
 
+func (p *mockProvider) OnGetCurrentTick(f func(context.Context, []common.Address) ([]int64, []error)) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.getCurrentTickFunc = f
+}
+
 func (p *mockProvider) OnGetClient(f func() (ethclients.ETHClient, error)) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -72,6 +81,18 @@ func (p *mockProvider) OnTestBloomFunc(f func(types.Bloom) bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.testBloomFunc = f
+}
+
+func (p *mockProvider) OnTickFreshnessGuaranteePercent(v uint64) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.tickFreshnessGuaranteePercent = v
+}
+
+func (p *mockProvider) TickFreshnessGuaranteePercent() uint64 {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.tickFreshnessGuaranteePercent
 }
 
 // --- Public Methods Passed to the Indexer (Read-Locked) ---
@@ -118,6 +139,17 @@ func (p *mockProvider) UpdatedInBlock(logs []types.Log) ([]common.Address, [][]i
 		p.t.Fatal("mockProvider.UpdatedInBlock was called but not configured")
 	}
 	return f(logs)
+}
+
+func (p *mockProvider) GetCurrentTick(ctx context.Context, pools []common.Address) ([]int64, []error) {
+	p.mu.RLock()
+	f := p.getCurrentTickFunc
+	p.mu.RUnlock()
+
+	if f == nil {
+		p.t.Fatal("mockProvider.GetCurrentTick was called but not configured")
+	}
+	return f(ctx, pools)
 }
 
 func (p *mockProvider) GetClient() (ethclients.ETHClient, error) {
@@ -176,50 +208,57 @@ func TestIndexerLifecycle(t *testing.T) {
 	newBlockEventer := make(chan *types.Block, 10)
 	testFrequency := 50 * time.Millisecond
 
+	provider.OnGetCurrentTick(func(ctx context.Context, pools []common.Address) ([]int64, []error) {
+		currentTicks := make([]int64, len(pools))
+		errs := make([]error, len(pools))
+		return currentTicks, errs
+	})
+	provider.OnTickFreshnessGuaranteePercent(5)
 	// Instantiate the TickIndexer using the new Config struct
 	cfg := &Config{
-		Registry:            prometheus.NewRegistry(),
-		NewBlockEventer:     newBlockEventer,
-		GetClient:           provider.GetClient,
-		GetTickBitmap:       provider.GetTickBitmap,
-		GetInitializedTicks: provider.GetInitializedTicks,
-		GetTicks:            provider.GetTicks,
-		UpdatedInBlock:      provider.UpdatedInBlock,
-		ErrorHandler:        errorHandler,
-		TestBloomFunc:       provider.TestBloomFunc,
-		FilterTopics:        [][]common.Hash{{common.HexToHash("0x1234")}}, // Provide a mock topic
-		InitFrequency:       testFrequency,
-		ResyncFrequency:     testFrequency,
-		UpdateFrequency:     testFrequency,
-		LogMaxRetries:       0,
-		LogRetryDelay:       0,
-		Logger:              slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Registry:                      prometheus.NewRegistry(),
+		NewBlockEventer:               newBlockEventer,
+		GetClient:                     provider.GetClient,
+		GetTickBitmap:                 provider.GetTickBitmap,
+		GetInitializedTicks:           provider.GetInitializedTicks,
+		GetTicks:                      provider.GetTicks,
+		UpdatedInBlock:                provider.UpdatedInBlock,
+		ErrorHandler:                  errorHandler,
+		TestBloomFunc:                 provider.TestBloomFunc,
+		FilterTopics:                  [][]common.Hash{{common.HexToHash("0x1234")}}, // Provide a mock topic
+		InitFrequency:                 testFrequency,
+		ResyncFrequency:               testFrequency,
+		UpdateFrequency:               testFrequency,
+		LogMaxRetries:                 0,
+		LogRetryDelay:                 0,
+		Logger:                        slog.New(slog.NewTextHandler(io.Discard, nil)),
+		GetCurrentTick:                provider.GetCurrentTick,
+		TickFreshnessGuaranteePercent: provider.TickFreshnessGuaranteePercent(),
 	}
 	tickIndexer, err := NewTickIndexer(ctx, cfg)
 	require.NoError(t, err)
 
 	// --- Test Initialization ---
+	initialTickInfo := TickInfo{Index: 120, LiquidityGross: big.NewInt(500), LiquidityNet: big.NewInt(-500)}
 	t.Run("should initialize a new pool correctly", func(t *testing.T) {
 
 		poolID := uint64(1)
 		poolAddr := common.HexToAddress("0x01")
 		poolTickSpacing := uint64(60)
-		initialTick := TickInfo{Index: 120, LiquidityGross: big.NewInt(500), LiquidityNet: big.NewInt(-500)}
 
 		provider.OnGetTickBitmap(func(ctx context.Context, a []common.Address, s []uint64) ([]Bitmap, []error) {
-			return []Bitmap{createTestBitmapFromTicks(initialTick.Index / int64(poolTickSpacing))}, nil
+			return []Bitmap{createTestBitmapFromTicks(initialTickInfo.Index / int64(poolTickSpacing))}, nil
 		})
 		provider.OnGetInitializedTicks(func(ctx context.Context, a []common.Address, b []Bitmap, s []uint64) ([][]TickInfo, []error) {
 			// Decode the tick from the bitmap to ensure the logic is consistent.
 			tick := TicksFromBitmap(b[0], int64(s[0]))[0]
-
 			// Return a descriptive error if the decoded tick doesn't match.
-			if tick != initialTick.Index {
+			if tick != initialTickInfo.Index {
 				return nil, []error{
-					fmt.Errorf("mismatched tick decoded from bitmap: expected %d, got %d", initialTick.Index, tick),
+					fmt.Errorf("mismatched tick decoded from bitmap: expected %d, got %d", initialTickInfo.Index, tick),
 				}
 			}
-			return [][]TickInfo{{initialTick}}, nil
+			return [][]TickInfo{{initialTickInfo}}, make([]error, len(a))
 		})
 
 		err := tickIndexer.Add(poolID, poolAddr, poolTickSpacing)
@@ -232,11 +271,11 @@ func TestIndexerLifecycle(t *testing.T) {
 
 		ticks, err := tickIndexer.Get(poolID)
 		require.NoError(t, err)
-		assert.Equal(t, initialTick.Index, ticks[0].Index)
+		assert.Equal(t, initialTickInfo.Index, ticks[0].Index)
 		require.NotNil(t, ticks[0].LiquidityGross)
 		require.NotNil(t, ticks[0].LiquidityNet)
-		assert.True(t, initialTick.LiquidityGross.Cmp(ticks[0].LiquidityGross) == 0)
-		assert.True(t, initialTick.LiquidityNet.Cmp(ticks[0].LiquidityNet) == 0)
+		assert.True(t, initialTickInfo.LiquidityGross.Cmp(ticks[0].LiquidityGross) == 0)
+		assert.True(t, initialTickInfo.LiquidityNet.Cmp(ticks[0].LiquidityNet) == 0)
 
 		require.Empty(t, getErrors(), "no errors should have been reported during the lifecycle")
 
@@ -260,8 +299,9 @@ func TestIndexerLifecycle(t *testing.T) {
 		provider.OnUpdatedInBlock(func(logs []types.Log) ([]common.Address, [][]int64, error) {
 			return []common.Address{poolAddr}, [][]int64{{updatedTick}}, nil
 		})
-		provider.OnGetTicks(func(ctx context.Context, p []common.Address, t [][]int64) ([][]TickInfo, []error) {
-			return [][]TickInfo{{updatedTickInfo}}, nil
+
+		provider.OnGetTicks(func(ctx context.Context, a []common.Address, t [][]int64) ([][]TickInfo, []error) {
+			return [][]TickInfo{{initialTickInfo, updatedTickInfo}}, make([]error, len(a))
 		})
 
 		provider.OnTestBloomFunc(func(b types.Bloom) bool { return true })
@@ -343,23 +383,31 @@ func TestIndexerInitializationFailureAndRetry(t *testing.T) {
 	testEthClient := ethclients.NewTestETHClient()
 	provider.OnGetClient(func() (ethclients.ETHClient, error) { return testEthClient, nil })
 	provider.OnTestBloomFunc(func(b types.Bloom) bool { return true })
+	provider.OnGetCurrentTick(func(ctx context.Context, pools []common.Address) ([]int64, []error) {
+		currentTicks := make([]int64, len(pools))
+		errs := make([]error, len(pools))
+		return currentTicks, errs
+	})
+	provider.OnTickFreshnessGuaranteePercent(5)
 
 	// --- Instantiate the System Under Test ---
 	cfg := &Config{
-		Registry:            prometheus.NewRegistry(),
-		NewBlockEventer:     newBlockEventer,
-		GetClient:           provider.GetClient,
-		GetTickBitmap:       provider.GetTickBitmap,
-		GetInitializedTicks: provider.GetInitializedTicks,
-		GetTicks:            provider.GetTicks,
-		UpdatedInBlock:      provider.UpdatedInBlock,
-		ErrorHandler:        errorHandler,
-		TestBloomFunc:       provider.TestBloomFunc,
-		FilterTopics:        [][]common.Hash{{common.HexToHash("0x1234")}}, // Provide a mock topic
-		InitFrequency:       testFrequency,
-		ResyncFrequency:     testFrequency,
-		UpdateFrequency:     testFrequency,
-		Logger:              slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Registry:                      prometheus.NewRegistry(),
+		NewBlockEventer:               newBlockEventer,
+		GetClient:                     provider.GetClient,
+		GetTickBitmap:                 provider.GetTickBitmap,
+		GetInitializedTicks:           provider.GetInitializedTicks,
+		GetTicks:                      provider.GetTicks,
+		UpdatedInBlock:                provider.UpdatedInBlock,
+		ErrorHandler:                  errorHandler,
+		TestBloomFunc:                 provider.TestBloomFunc,
+		FilterTopics:                  [][]common.Hash{{common.HexToHash("0x1234")}}, // Provide a mock topic
+		InitFrequency:                 testFrequency,
+		ResyncFrequency:               testFrequency,
+		UpdateFrequency:               testFrequency,
+		Logger:                        slog.New(slog.NewTextHandler(io.Discard, nil)),
+		GetCurrentTick:                provider.GetCurrentTick,
+		TickFreshnessGuaranteePercent: provider.TickFreshnessGuaranteePercent(),
 	}
 	tickIndexer, err := NewTickIndexer(ctx, cfg)
 	require.NoError(t, err)
@@ -381,12 +429,16 @@ func TestIndexerInitializationFailureAndRetry(t *testing.T) {
 		// Configure mocks to simulate a failure on the first RPC call.
 		provider.OnGetTickBitmap(func(ctx context.Context, a []common.Address, s []uint64) ([]Bitmap, []error) {
 			calledGetTickBitmap.Store(true)
-			return nil, []error{simulatedErr}
+			errs := []error{}
+			for range a {
+				errs = append(errs, simulatedErr)
+			}
+			return nil, errs
 		})
 		// This mock should NOT be called if our error handling logic is correct.
 		provider.OnGetInitializedTicks(func(ctx context.Context, a []common.Address, b []Bitmap, s []uint64) ([][]TickInfo, []error) {
 			calledGetInitializedTick.Store(true)
-			return nil, nil
+			return nil, make([]error, len(a))
 		})
 
 		// Action: Add the pool, which will trigger the failing initialization.
@@ -416,7 +468,7 @@ func TestIndexerInitializationFailureAndRetry(t *testing.T) {
 		// "Fix" the RPC node by configuring mocks to succeed.
 		initialTick := TickInfo{Index: 100, LiquidityGross: big.NewInt(100), LiquidityNet: big.NewInt(-100)}
 		provider.OnGetTickBitmap(func(ctx context.Context, a []common.Address, s []uint64) ([]Bitmap, []error) {
-			return []Bitmap{createTestBitmapFromTicks(initialTick.Index / int64(poolTickSpacing))}, nil
+			return []Bitmap{createTestBitmapFromTicks(initialTick.Index / int64(poolTickSpacing))}, make([]error, len(a))
 		})
 		provider.OnGetInitializedTicks(func(ctx context.Context, a []common.Address, b []Bitmap, s []uint64) ([][]TickInfo, []error) {
 			// Decode the tick from the bitmap to ensure the logic is consistent.
@@ -428,7 +480,7 @@ func TestIndexerInitializationFailureAndRetry(t *testing.T) {
 					fmt.Errorf("mismatched tick decoded from bitmap: expected %d, got %d", initialTick.Index, tick),
 				}
 			}
-			return [][]TickInfo{{initialTick}}, nil
+			return [][]TickInfo{{initialTick}}, make([]error, len(a))
 		})
 
 		// Assertion: The initializer's ticker should run again and process the pending pool.
@@ -481,23 +533,31 @@ func TestIndexerPartialInitializationFailure(t *testing.T) {
 	testEthClient := ethclients.NewTestETHClient()
 	provider.OnGetClient(func() (ethclients.ETHClient, error) { return testEthClient, nil })
 	provider.OnTestBloomFunc(func(b types.Bloom) bool { return true })
+	provider.OnGetCurrentTick(func(ctx context.Context, pools []common.Address) ([]int64, []error) {
+		currentTicks := make([]int64, len(pools))
+		errs := make([]error, len(pools))
+		return currentTicks, errs
+	})
+	provider.OnTickFreshnessGuaranteePercent(5)
 
 	// --- Instantiate ---
 	cfg := &Config{
-		Registry:            prometheus.NewRegistry(),
-		NewBlockEventer:     newBlockEventer,
-		GetClient:           provider.GetClient,
-		GetTickBitmap:       provider.GetTickBitmap,
-		GetInitializedTicks: provider.GetInitializedTicks,
-		GetTicks:            provider.GetTicks,
-		UpdatedInBlock:      provider.UpdatedInBlock,
-		ErrorHandler:        errorHandler,
-		TestBloomFunc:       provider.TestBloomFunc,
-		FilterTopics:        [][]common.Hash{{common.HexToHash("0x1234")}}, // Provide a mock topic
-		InitFrequency:       testFrequency,
-		ResyncFrequency:     resyncFrequency,
-		UpdateFrequency:     testFrequency,
-		Logger:              slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Registry:                      prometheus.NewRegistry(),
+		NewBlockEventer:               newBlockEventer,
+		GetClient:                     provider.GetClient,
+		GetTickBitmap:                 provider.GetTickBitmap,
+		GetInitializedTicks:           provider.GetInitializedTicks,
+		GetTicks:                      provider.GetTicks,
+		UpdatedInBlock:                provider.UpdatedInBlock,
+		ErrorHandler:                  errorHandler,
+		TestBloomFunc:                 provider.TestBloomFunc,
+		FilterTopics:                  [][]common.Hash{{common.HexToHash("0x1234")}}, // Provide a mock topic
+		InitFrequency:                 testFrequency,
+		ResyncFrequency:               resyncFrequency,
+		UpdateFrequency:               testFrequency,
+		Logger:                        slog.New(slog.NewTextHandler(io.Discard, nil)),
+		GetCurrentTick:                provider.GetCurrentTick,
+		TickFreshnessGuaranteePercent: provider.TickFreshnessGuaranteePercent(),
 	}
 	tickIndexer, err := NewTickIndexer(ctx, cfg)
 	require.NoError(t, err)
@@ -546,7 +606,7 @@ func TestIndexerPartialInitializationFailure(t *testing.T) {
 				fmt.Errorf("mismatched tick decoded from bitmap: expected %d, got %d", tickSuccess.Index, tick),
 			}
 		}
-		return [][]TickInfo{{tickSuccess}}, nil
+		return [][]TickInfo{{tickSuccess}}, make([]error, len(addrs))
 	})
 
 	// Action: Add both pools.
@@ -580,7 +640,7 @@ func TestIndexerPartialInitializationFailure(t *testing.T) {
 
 	// Reconfigure mocks to succeed for the previously failed pool.
 	provider.OnGetTickBitmap(func(ctx context.Context, addrs []common.Address, s []uint64) ([]Bitmap, []error) {
-		return []Bitmap{createTestBitmapFromTicks(tickFail.Index / int64(poolTickSpacingFail))}, nil
+		return []Bitmap{createTestBitmapFromTicks(tickFail.Index / int64(poolTickSpacingFail))}, make([]error, len(addrs))
 	})
 	provider.OnGetInitializedTicks(func(ctx context.Context, addrs []common.Address, b []Bitmap, s []uint64) ([][]TickInfo, []error) {
 		// Decode the tick from the bitmap to ensure the logic is consistent.
@@ -592,7 +652,7 @@ func TestIndexerPartialInitializationFailure(t *testing.T) {
 				fmt.Errorf("mismatched tick decoded from bitmap: expected %d, got %d", tickFail.Index, tick),
 			}
 		}
-		return [][]TickInfo{{tickFail}}, nil
+		return [][]TickInfo{{tickFail}}, make([]error, len(addrs))
 	})
 
 	// Assertion: Eventually, the failed pool should also be successfully initialized.
@@ -647,23 +707,31 @@ func TestIndexerResyncer(t *testing.T) {
 	testEthClient := ethclients.NewTestETHClient()
 	provider.OnGetClient(func() (ethclients.ETHClient, error) { return testEthClient, nil })
 	provider.OnTestBloomFunc(func(b types.Bloom) bool { return true })
+	provider.OnGetCurrentTick(func(ctx context.Context, pools []common.Address) ([]int64, []error) {
+		currentTicks := make([]int64, len(pools))
+		errs := make([]error, len(pools))
+		return currentTicks, errs
+	})
+	provider.OnTickFreshnessGuaranteePercent(5)
 
 	// --- Instantiate ---
 	cfg := &Config{
-		Registry:            prometheus.NewRegistry(),
-		NewBlockEventer:     newBlockEventer,
-		GetClient:           provider.GetClient,
-		GetTickBitmap:       provider.GetTickBitmap,
-		GetInitializedTicks: provider.GetInitializedTicks,
-		GetTicks:            provider.GetTicks,
-		UpdatedInBlock:      provider.UpdatedInBlock,
-		ErrorHandler:        errorHandler,
-		TestBloomFunc:       provider.TestBloomFunc,
-		FilterTopics:        [][]common.Hash{{common.HexToHash("0x1234")}}, // Provide a mock topic
-		InitFrequency:       testFrequency,
-		ResyncFrequency:     resyncFrequency,
-		UpdateFrequency:     testFrequency,
-		Logger:              slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Registry:                      prometheus.NewRegistry(),
+		NewBlockEventer:               newBlockEventer,
+		GetClient:                     provider.GetClient,
+		GetTickBitmap:                 provider.GetTickBitmap,
+		GetInitializedTicks:           provider.GetInitializedTicks,
+		GetTicks:                      provider.GetTicks,
+		UpdatedInBlock:                provider.UpdatedInBlock,
+		ErrorHandler:                  errorHandler,
+		TestBloomFunc:                 provider.TestBloomFunc,
+		FilterTopics:                  [][]common.Hash{{common.HexToHash("0x1234")}}, // Provide a mock topic
+		InitFrequency:                 testFrequency,
+		ResyncFrequency:               resyncFrequency,
+		UpdateFrequency:               testFrequency,
+		Logger:                        slog.New(slog.NewTextHandler(io.Discard, nil)),
+		GetCurrentTick:                provider.GetCurrentTick,
+		TickFreshnessGuaranteePercent: provider.TickFreshnessGuaranteePercent(),
 	}
 	tickIndexer, err := NewTickIndexer(ctx, cfg)
 	require.NoError(t, err)
@@ -684,7 +752,7 @@ func TestIndexerResyncer(t *testing.T) {
 	})
 
 	provider.OnGetInitializedTicks(func(ctx context.Context, a []common.Address, b []Bitmap, s []uint64) ([][]TickInfo, []error) {
-		return [][]TickInfo{{initialTick120, initialTick240}}, nil
+		return [][]TickInfo{{initialTick120, initialTick240}}, make([]error, len(a))
 	})
 
 	require.NoError(t, tickIndexer.Add(poolID, poolAddr, poolTickSpacing))
@@ -703,12 +771,12 @@ func TestIndexerResyncer(t *testing.T) {
 	// Re-configure GetTickBitmap to return this new reality for the resyncer.
 	provider.OnGetTickBitmap(func(ctx context.Context, addrs []common.Address, s []uint64) ([]Bitmap, []error) {
 		require.Equal(t, poolTickSpacing, s[0])
-		return []Bitmap{onChainBitmap}, nil
+		return []Bitmap{onChainBitmap}, make([]error, len(addrs))
 	})
 
 	// Re-configure GetInitializedTicks to return the new, correct tick data.
 	provider.OnGetInitializedTicks(func(ctx context.Context, addrs []common.Address, b []Bitmap, s []uint64) ([][]TickInfo, []error) {
-		return [][]TickInfo{{initialTick120, newTick300}}, nil
+		return [][]TickInfo{{initialTick120, newTick300}}, make([]error, len(addrs))
 	})
 
 	// --- Phase 3: Assert that the state was corrected ---
