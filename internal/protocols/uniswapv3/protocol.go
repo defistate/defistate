@@ -3,6 +3,7 @@ package uniswapv3
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -36,6 +37,10 @@ var (
 	DefaultTickInfoProviderBatchSize          = 25
 	DefaultTickInfoProviderMaxConcurrency     = 5
 	DefaultTickDataProviderMaxConcurrentCalls = 5
+
+	TickFreshnessGuaranteePercent = uint64(5)
+
+	ErrUniswapV3SystemNotInitialized = errors.New("uniswapv3system not initialized")
 )
 
 // UniswapV3SystemConfig holds the core settings for the Uniswap V3 system.
@@ -212,33 +217,73 @@ func initializeByForkID(
 		DefaultTickDataProviderMaxConcurrentCalls,
 	)
 
+	var uniswapV3System *uniswapv3.UniswapV3System
+	getCurrentTick := func(ctx context.Context, pools []common.Address) (currentTickEachPool []int64, errs []error) {
+		currentTickEachPool = make([]int64, len(pools))
+		errs = make([]error, len(pools))
+		if uniswapV3System == nil {
+			// simply return uninitialized system
+			for i := range errs {
+				errs[i] = ErrUniswapV3SystemNotInitialized
+			}
+			return
+		}
+
+		view := uniswapV3System.View()
+		idToCurrentTick := make(map[uint64]int64, len(view))
+		for _, p := range view {
+			idToCurrentTick[p.ID] = p.Tick
+		}
+
+		for i, addr := range pools {
+			id, err := cfg.PoolAddressToID(addr)
+			if err != nil {
+				errs[i] = err
+				continue
+			}
+
+			// id is known by whole system, but is id know by uniswapV3System?
+
+			tick, known := idToCurrentTick[id]
+			if !known {
+				errs[i] = fmt.Errorf("tick unknown for pool with id %d", id)
+				continue
+			}
+			currentTickEachPool[i] = tick
+		}
+
+		return currentTickEachPool, errs
+	}
+
 	uniswapV3TickIndexer, err := uniswapv3ticks.NewTickIndexer(
 		ctx,
 		&uniswapv3ticks.Config{
-			SystemName:          cfg.TickIndexerConfig.SystemName,
-			Registry:            cfg.PrometheusRegistry,
-			NewBlockEventer:     cfg.BlockSubscriberGenerator(cfg.TickIndexerConfig.SystemName),
-			GetClient:           cfg.GetClient,
-			GetTickBitmap:       tickDataProvider.GetTickBitMap,
-			GetInitializedTicks: tickDataProvider.GetInitializedTicks,
-			GetTicks:            tickDataProvider.GetTicks,
-			UpdatedInBlock:      helpers.TickIndexer.UpdatedInBlock,
-			ErrorHandler:        cfg.ErrorHandler, // Note: This uses the already-wrapped handler
-			TestBloomFunc:       helpers.TickIndexer.TestBloom,
-			FilterTopics:        helpers.System.FilterTopics,
-			InitFrequency:       cfg.TickIndexerConfig.InitFrequency,
-			ResyncFrequency:     cfg.TickIndexerConfig.ResyncFrequency,
-			UpdateFrequency:     cfg.TickIndexerConfig.UpdateFrequency,
-			LogMaxRetries:       cfg.TickIndexerConfig.LogMaxRetries,
-			LogRetryDelay:       cfg.TickIndexerConfig.LogRetryDelay,
-			Logger:              cfg.Logger.With("component", "tick-indexer")},
+			SystemName:                    cfg.TickIndexerConfig.SystemName,
+			Registry:                      cfg.PrometheusRegistry,
+			NewBlockEventer:               cfg.BlockSubscriberGenerator(cfg.TickIndexerConfig.SystemName),
+			GetClient:                     cfg.GetClient,
+			GetTickBitmap:                 tickDataProvider.GetTickBitMap,
+			GetInitializedTicks:           tickDataProvider.GetInitializedTicks,
+			GetTicks:                      tickDataProvider.GetTicks,
+			UpdatedInBlock:                helpers.TickIndexer.UpdatedInBlock,
+			ErrorHandler:                  cfg.ErrorHandler, // Note: This uses the already-wrapped handler
+			TestBloomFunc:                 helpers.TickIndexer.TestBloom,
+			FilterTopics:                  helpers.System.FilterTopics,
+			GetCurrentTick:                getCurrentTick,
+			TickFreshnessGuaranteePercent: TickFreshnessGuaranteePercent,
+			InitFrequency:                 cfg.TickIndexerConfig.InitFrequency,
+			ResyncFrequency:               cfg.TickIndexerConfig.ResyncFrequency,
+			UpdateFrequency:               cfg.TickIndexerConfig.UpdateFrequency,
+			LogMaxRetries:                 cfg.TickIndexerConfig.LogMaxRetries,
+			LogRetryDelay:                 cfg.TickIndexerConfig.LogRetryDelay,
+			Logger:                        cfg.Logger.With("component", "tick-indexer")},
 	)
 
 	if err != nil {
 		return nil, err
 	}
 
-	uniswapV3System, err := uniswapv3.NewUniswapV3System(
+	uniswapV3System, err = uniswapv3.NewUniswapV3System(
 		ctx,
 		&uniswapv3.Config{
 			SystemName:           cfg.SystemConfig.SystemName,
