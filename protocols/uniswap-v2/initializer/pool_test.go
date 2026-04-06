@@ -36,6 +36,15 @@ func newBigIntFromString(s string) *big.Int {
 	return n
 }
 
+// Helper function to create ABI-encoded calldata for factory.getPair(token0, token1).
+func getPairCallData(token0, token1 common.Address) []byte {
+	data := make([]byte, 4+32+32)
+	copy(data[:4], getPairSig)
+	copy(data[4+12:4+32], token0.Bytes())
+	copy(data[4+32+12:4+64], token1.Bytes())
+	return data
+}
+
 // --- Test Suite ---
 
 func TestPoolInitializer(t *testing.T) {
@@ -62,6 +71,8 @@ func TestPoolInitializer(t *testing.T) {
 	sushiPoolAddr := common.HexToAddress("0x397FF1542f962076d0BFE58e2424B25640312133") // WETH/MMY
 	unknownPoolAddr := common.HexToAddress("0x1111111111111111111111111111111111111111")
 	failingPoolAddr := common.HexToAddress("0x2222222222222222222222222222222222222222")
+	mismatchPoolAddr := common.HexToAddress("0x3333333333333333333333333333333333333333")
+	wrongCanonicalPairAddr := common.HexToAddress("0x9999999999999999999999999999999999999999")
 
 	// Mock token details
 	wethAddr := common.HexToAddress("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2")
@@ -97,10 +108,12 @@ func TestPoolInitializer(t *testing.T) {
 						return addressToBytes(usdcAddr), nil
 					case msg.To.Hex() == uniPoolAddr.Hex() && common.Bytes2Hex(msg.Data) == common.Bytes2Hex(token1Sig):
 						return addressToBytes(wethAddr), nil
+					case msg.To.Hex() == knownUniFactory.Address.Hex() && common.Bytes2Hex(msg.Data) == common.Bytes2Hex(getPairCallData(usdcAddr, wethAddr)):
+						return addressToBytes(uniPoolAddr), nil
 					case msg.To.Hex() == uniPoolAddr.Hex() && common.Bytes2Hex(msg.Data) == common.Bytes2Hex(getReservesSig):
 						return reservesToBytes(uniReserves[0], uniReserves[1]), nil
 					}
-					return nil, fmt.Errorf("unexpected call in test: %s", msg.To.Hex())
+					return nil, fmt.Errorf("unexpected call in test: to=%s data=%x", msg.To.Hex(), msg.Data)
 				})
 			},
 			validate: func(t *testing.T, inputPools []common.Address, token0s, token1s []common.Address, poolTypes []uint8, feeBps []uint16, reserve0s, reserve1s []*big.Int, errs []error) {
@@ -111,6 +124,7 @@ func TestPoolInitializer(t *testing.T) {
 				assert.Equal(t, uint16(30), feeBps[0])
 				assert.Equal(t, uint8(0), poolTypes[0])
 				assert.Equal(t, uniReserves[0], reserve0s[0])
+				assert.Equal(t, uniReserves[1], reserve1s[0])
 			},
 		},
 		{
@@ -131,6 +145,11 @@ func TestPoolInitializer(t *testing.T) {
 							return reservesToBytes(uniReserves[0], uniReserves[1]), nil
 						}
 					}
+					if msg.To.Hex() == knownUniFactory.Address.Hex() &&
+						common.Bytes2Hex(msg.Data) == common.Bytes2Hex(getPairCallData(usdcAddr, wethAddr)) {
+						return addressToBytes(uniPoolAddr), nil
+					}
+
 					// Handle Sushi Pool
 					if msg.To.Hex() == sushiPoolAddr.Hex() {
 						switch {
@@ -144,12 +163,17 @@ func TestPoolInitializer(t *testing.T) {
 							return reservesToBytes(sushiReserves[0], sushiReserves[1]), nil
 						}
 					}
-					return nil, fmt.Errorf("unexpected call in test: %s", msg.To.Hex())
+					if msg.To.Hex() == knownSushiFactory.Address.Hex() &&
+						common.Bytes2Hex(msg.Data) == common.Bytes2Hex(getPairCallData(wethAddr, mmyAddr)) {
+						return addressToBytes(sushiPoolAddr), nil
+					}
+
+					return nil, fmt.Errorf("unexpected call in test: to=%s data=%x", msg.To.Hex(), msg.Data)
 				})
 			},
 			validate: func(t *testing.T, inputPools []common.Address, token0s, token1s []common.Address, poolTypes []uint8, feeBps []uint16, reserve0s, reserve1s []*big.Int, errs []error) {
 				require.Len(t, errs, 2)
-				// Use a map to validate results since concurrency means order is not guaranteed.
+
 				results := make(map[string]map[string]interface{})
 				for i, addr := range inputPools {
 					results[addr.Hex()] = map[string]interface{}{
@@ -163,21 +187,25 @@ func TestPoolInitializer(t *testing.T) {
 					}
 				}
 
-				// Validate Uniswap pool results
 				uniResults, ok := results[uniPoolAddr.Hex()]
 				require.True(t, ok, "Uniswap pool results not found")
 				assert.Nil(t, uniResults["err"], "Uniswap pool should not have an error")
 				assert.Equal(t, usdcAddr, uniResults["t0"])
 				assert.Equal(t, wethAddr, uniResults["t1"])
 				assert.Equal(t, uint16(30), uniResults["fee"])
+				assert.Equal(t, uint8(0), uniResults["type"])
+				assert.Equal(t, uniReserves[0], uniResults["r0"])
+				assert.Equal(t, uniReserves[1], uniResults["r1"])
 
-				// Validate SushiSwap pool results
 				sushiResults, ok := results[sushiPoolAddr.Hex()]
 				require.True(t, ok, "SushiSwap pool results not found")
 				assert.Nil(t, sushiResults["err"], "SushiSwap pool should not have an error")
 				assert.Equal(t, wethAddr, sushiResults["t0"])
 				assert.Equal(t, mmyAddr, sushiResults["t1"])
 				assert.Equal(t, uint16(30), sushiResults["fee"])
+				assert.Equal(t, uint8(0), sushiResults["type"])
+				assert.Equal(t, sushiReserves[0], sushiResults["r0"])
+				assert.Equal(t, sushiReserves[1], sushiResults["r1"])
 			},
 		},
 		{
@@ -186,9 +214,9 @@ func TestPoolInitializer(t *testing.T) {
 			setupHandler: func(t *testing.T, client *ethclients.TestETHClient) {
 				client.SetCallContractHandler(func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
 					if msg.To.Hex() == unknownPoolAddr.Hex() && common.Bytes2Hex(msg.Data) == common.Bytes2Hex(factorySig) {
-						return addressToBytes(common.HexToAddress("0xdeadbeef")), nil
+						return addressToBytes(common.HexToAddress("0x00000000000000000000000000000000DeaDBeef")), nil
 					}
-					return nil, fmt.Errorf("unexpected call in test: %s", msg.To.Hex())
+					return nil, fmt.Errorf("unexpected call in test: to=%s data=%x", msg.To.Hex(), msg.Data)
 				})
 			},
 			validate: func(t *testing.T, inputPools []common.Address, token0s, token1s []common.Address, poolTypes []uint8, feeBps []uint16, reserve0s, reserve1s []*big.Int, errs []error) {
@@ -209,12 +237,35 @@ func TestPoolInitializer(t *testing.T) {
 							return nil, errors.New("rpc error")
 						}
 					}
-					return nil, fmt.Errorf("unexpected call in test: %s", msg.To.Hex())
+					return nil, fmt.Errorf("unexpected call in test: to=%s data=%x", msg.To.Hex(), msg.Data)
 				})
 			},
 			validate: func(t *testing.T, inputPools []common.Address, token0s, token1s []common.Address, poolTypes []uint8, feeBps []uint16, reserve0s, reserve1s []*big.Int, errs []error) {
 				require.Error(t, errs[0])
 				assert.Contains(t, errs[0].Error(), "failed to get tokens")
+			},
+		},
+		{
+			name:      "Error Case - Canonical pair mismatch",
+			poolAddrs: []common.Address{mismatchPoolAddr},
+			setupHandler: func(t *testing.T, client *ethclients.TestETHClient) {
+				client.SetCallContractHandler(func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+					switch {
+					case msg.To.Hex() == mismatchPoolAddr.Hex() && common.Bytes2Hex(msg.Data) == common.Bytes2Hex(factorySig):
+						return addressToBytes(knownUniFactory.Address), nil
+					case msg.To.Hex() == mismatchPoolAddr.Hex() && common.Bytes2Hex(msg.Data) == common.Bytes2Hex(token0Sig):
+						return addressToBytes(usdcAddr), nil
+					case msg.To.Hex() == mismatchPoolAddr.Hex() && common.Bytes2Hex(msg.Data) == common.Bytes2Hex(token1Sig):
+						return addressToBytes(wethAddr), nil
+					case msg.To.Hex() == knownUniFactory.Address.Hex() && common.Bytes2Hex(msg.Data) == common.Bytes2Hex(getPairCallData(usdcAddr, wethAddr)):
+						return addressToBytes(wrongCanonicalPairAddr), nil
+					}
+					return nil, fmt.Errorf("unexpected call in test: to=%s data=%x", msg.To.Hex(), msg.Data)
+				})
+			},
+			validate: func(t *testing.T, inputPools []common.Address, token0s, token1s []common.Address, poolTypes []uint8, feeBps []uint16, reserve0s, reserve1s []*big.Int, errs []error) {
+				require.Error(t, errs[0])
+				assert.Contains(t, errs[0].Error(), "canonical pair mismatch")
 			},
 		},
 		{
@@ -234,6 +285,12 @@ func TestPoolInitializer(t *testing.T) {
 			setupHandler: func(t *testing.T, client *ethclients.TestETHClient) {},
 			validate: func(t *testing.T, inputPools []common.Address, token0s, token1s []common.Address, poolTypes []uint8, feeBps []uint16, reserve0s, reserve1s []*big.Int, errs []error) {
 				assert.Empty(t, token0s)
+				assert.Empty(t, token1s)
+				assert.Empty(t, poolTypes)
+				assert.Empty(t, feeBps)
+				assert.Empty(t, reserve0s)
+				assert.Empty(t, reserve1s)
+				assert.Empty(t, errs)
 			},
 		},
 	}
@@ -251,20 +308,24 @@ func TestPoolInitializer(t *testing.T) {
 
 			initializer, err := NewPoolInitializer(knownFactories, 25)
 			require.NoError(t, err)
+
 			ctx := context.Background()
 			if tc.name == "Context Cancellation" {
 				var cancel context.CancelFunc
 				ctx, cancel = context.WithCancel(context.Background())
-				cancel() // Cancel context immediately
+				cancel()
 			}
 
 			token0s, token1s, poolTypes, feeBps, reserve0s, reserve1s, errs := initializer.Initialize(ctx, tc.poolAddrs, getClient)
 
-			// Basic length checks
 			assert.Len(t, token0s, len(tc.poolAddrs))
+			assert.Len(t, token1s, len(tc.poolAddrs))
+			assert.Len(t, poolTypes, len(tc.poolAddrs))
+			assert.Len(t, feeBps, len(tc.poolAddrs))
+			assert.Len(t, reserve0s, len(tc.poolAddrs))
+			assert.Len(t, reserve1s, len(tc.poolAddrs))
 			assert.Len(t, errs, len(tc.poolAddrs))
 
-			// Detailed validation
 			if tc.validate != nil {
 				tc.validate(t, tc.poolAddrs, token0s, token1s, poolTypes, feeBps, reserve0s, reserve1s, errs)
 			}

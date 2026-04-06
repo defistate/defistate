@@ -19,6 +19,7 @@ var (
 	token1Sig      = abi.UniswapV2ABI.Methods["token1"].ID
 	getReservesSig = abi.UniswapV2ABI.Methods["getReserves"].ID
 	factorySig     = abi.UniswapV2ABI.Methods["factory"].ID
+	getPairSig     = abi.UniswapV2FactoryABI.Methods["getPair"].ID
 )
 
 const (
@@ -117,6 +118,23 @@ func (p *PoolInitializer) Initialize(
 			t0, t1, err := getTokens(ctx, poolAddr, getClient)
 			if err != nil {
 				errs[index] = fmt.Errorf("failed to get tokens: %w", err)
+				return
+			}
+
+			canonicalPair, err := getCanonicalPair(ctx, factoryAddr, t0, t1, getClient)
+			if err != nil {
+				errs[index] = fmt.Errorf("failed canonical pair check: %w", err)
+				return
+			}
+			if canonicalPair != poolAddr {
+				errs[index] = fmt.Errorf(
+					"canonical pair mismatch for pool %s: factory %s returned %s for tokens %s/%s",
+					poolAddr.Hex(),
+					factoryAddr.Hex(),
+					canonicalPair.Hex(),
+					t0.Hex(),
+					t1.Hex(),
+				)
 				return
 			}
 
@@ -219,4 +237,38 @@ func getReserves(parentCtx context.Context, poolAddr common.Address, getClient f
 	reserve1 := new(big.Int).SetBytes(reservesCallData[32:64])
 
 	return reserve0, reserve1, nil
+}
+
+func getCanonicalPair(
+	parentCtx context.Context,
+	factoryAddr common.Address,
+	token0 common.Address,
+	token1 common.Address,
+	getClient func() (ethclients.ETHClient, error),
+) (common.Address, error) {
+	client, err := getClient()
+	if err != nil {
+		return common.Address{}, err
+	}
+
+	ctx, cancel := context.WithTimeout(parentCtx, defaultRPCTimeout)
+	defer cancel()
+
+	callData := make([]byte, 4+32+32)
+	copy(callData[:4], getPairSig)
+	copy(callData[4+12:4+32], token0.Bytes())
+	copy(callData[4+32+12:4+64], token1.Bytes())
+
+	out, err := client.CallContract(ctx, ethereum.CallMsg{
+		To:   &factoryAddr,
+		Data: callData,
+	}, nil)
+	if err != nil {
+		return common.Address{}, fmt.Errorf("eth_call for getPair failed: %w", err)
+	}
+	if len(out) != 32 {
+		return common.Address{}, fmt.Errorf("invalid response length for getPair: got %d bytes", len(out))
+	}
+
+	return common.BytesToAddress(out), nil
 }
