@@ -11,6 +11,7 @@ import (
 
 	// Adjust import path if necessary
 	ethclients "github.com/defistate/defistate/clients/eth-clients"
+	"github.com/defistate/defistate/protocols/uniswap-v3/abi"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/assert"
@@ -92,18 +93,6 @@ func TestPoolInitializerFunc(t *testing.T) {
 	knownFactory := common.HexToAddress("0xf")
 	knownFactories := []common.Address{knownFactory}
 
-	mockClient.SetCallContractHandler(func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
-		if common.Bytes2Hex(msg.Data) == common.Bytes2Hex(factorySig) {
-			to := *msg.To
-			if to == pool1 || to == pool2 || to == pool3 {
-				return addressToBytes(knownFactory), nil
-			}
-			return addressToBytes(common.Address{}), nil
-		}
-
-		return nil, fmt.Errorf("unexpected contract call")
-	})
-
 	dataSource.poolsByAdd[pool1] = mockPoolData{
 		token0:       common.HexToAddress("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"), // USDC
 		token1:       common.HexToAddress("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"), // WETH
@@ -124,6 +113,41 @@ func TestPoolInitializerFunc(t *testing.T) {
 	}
 	// Pool3 data is the same as pool1 for simplicity in tests that need a third valid pool.
 	dataSource.poolsByAdd[pool3] = dataSource.poolsByAdd[pool1]
+
+	mockClient.SetCallContractHandler(func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+		if common.Bytes2Hex(msg.Data) == common.Bytes2Hex(factorySig) {
+			to := *msg.To
+			if to == pool1 || to == pool2 || to == pool3 {
+				return addressToBytes(knownFactory), nil
+			}
+			return addressToBytes(common.Address{}), nil
+		}
+
+		if common.Bytes2Hex(msg.Data[:4]) == common.Bytes2Hex(getPoolSig) {
+			// decode tokens and fee from the input data
+			inputs := abi.UniswapV3FactoryABI.Methods["getPool"].Inputs
+			args, err := inputs.Unpack(msg.Data[4:])
+			if err != nil {
+				return nil, fmt.Errorf("unpack getPool args failed: %w", err)
+			}
+			token0 := args[0].(common.Address)
+			token1 := args[1].(common.Address)
+			fee := uint64(args[2].(*big.Int).Uint64())
+
+			poolData1 := dataSource.poolsByAdd[pool1]
+			poolData2 := dataSource.poolsByAdd[pool2]
+
+			if (token0 == poolData1.token0 || token0 == poolData1.token1) && (token1 == poolData1.token0 || token1 == poolData1.token1) && fee == poolData1.fee {
+				return addressToBytes(pool1), nil
+			} else if (token0 == poolData2.token0 || token0 == poolData2.token1) && (token1 == poolData2.token0 || token1 == poolData2.token1) && fee == poolData2.fee {
+				return addressToBytes(pool2), nil
+			} else {
+				return addressToBytes(common.Address{}), nil
+			}
+		}
+
+		return nil, fmt.Errorf("unexpected contract call")
+	})
 
 	// --- Sub-test for NewPoolInitializerFunc ---
 	t.Run("NewPoolInitializerFunc validates input", func(t *testing.T) {

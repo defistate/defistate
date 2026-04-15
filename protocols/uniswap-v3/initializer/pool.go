@@ -18,6 +18,7 @@ import (
 
 var (
 	factorySig = abi.UniswapV3ABI.Methods["factory"].ID // factory method has the same signature across all forks so this is safe
+	getPoolSig = abi.UniswapV3FactoryABI.Methods["getPool"].ID
 )
 
 const (
@@ -141,6 +142,29 @@ func NewPoolInitializerFunc(
 					return
 				}
 
+				factoryPoolAddr, err := getPoolFromFactory(ctx, factoryAddr, token0, token1, fee, client)
+				if err != nil {
+					errs[index] = fmt.Errorf(
+						"could not verify pool %s against factory %s: %w",
+						address.Hex(),
+						factoryAddr.Hex(),
+						err,
+					)
+					return
+				}
+				if factoryPoolAddr != address {
+					errs[index] = fmt.Errorf(
+						"factory %s returned pool %s for token0=%s token1=%s fee=%d, expected %s",
+						factoryAddr.Hex(),
+						factoryPoolAddr.Hex(),
+						token0.Hex(),
+						token1.Hex(),
+						fee,
+						address.Hex(),
+					)
+					return
+				}
+
 				// Assign the results to their respective indices in the pre-allocated slices.
 				token0s[index] = token0
 				token1s[index] = token1
@@ -178,4 +202,37 @@ func getFactory(parentCtx context.Context, poolAddr common.Address, client ethcl
 	}
 
 	return common.BytesToAddress(factoryCallData), nil
+}
+
+func getPoolFromFactory(
+	parentCtx context.Context,
+	factoryAddr common.Address,
+	token0 common.Address,
+	token1 common.Address,
+	fee uint64,
+	client ethclients.ETHClient,
+) (common.Address, error) {
+	ctx, cancel := context.WithTimeout(parentCtx, defaultRPCTimeout)
+	defer cancel()
+
+	inputs := abi.UniswapV3FactoryABI.Methods["getPool"].Inputs
+	args, err := inputs.Pack(token0, token1, big.NewInt(int64(fee)))
+	if err != nil {
+		return common.Address{}, fmt.Errorf("pack getPool args failed: %w", err)
+	}
+
+	callData := append(getPoolSig, args...)
+
+	resp, err := client.CallContract(ctx, ethereum.CallMsg{
+		To:   &factoryAddr,
+		Data: callData,
+	}, nil)
+	if err != nil {
+		return common.Address{}, fmt.Errorf("eth_call for getPool failed: %w", err)
+	}
+	if len(resp) != 32 {
+		return common.Address{}, fmt.Errorf("invalid response length for getPool: got %d bytes", len(resp))
+	}
+
+	return common.BytesToAddress(resp), nil
 }
