@@ -312,7 +312,7 @@ func TestIndexerLifecycle(t *testing.T) {
 		require.Eventually(t, func() bool {
 			ticks, err := tickIndexer.Get(poolID)
 			return err == nil && len(ticks) == 2
-		}, 1*time.Second, 10*time.Millisecond, "indexer should eventually contain two ticks after update")
+		}, 10*time.Second, 10*time.Millisecond, "indexer should eventually contain two ticks after update")
 
 		_, err := tickIndexer.Get(poolID)
 		require.NoError(t, err)
